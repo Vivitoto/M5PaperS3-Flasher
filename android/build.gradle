@@ -5,6 +5,20 @@ allprojects {
     }
 }
 
+// Fix for AGP 8.1+ namespace requirement on older packages
+subprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty("android")) {
+            project.android {
+                if (namespace == null || namespace.isEmpty()) {
+                    namespace project.group ?: "com.example.${project.name}"
+                }
+                compileSdkVersion 34
+            }
+        }
+    }
+}
+
 rootProject.buildDir = "../build"
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"

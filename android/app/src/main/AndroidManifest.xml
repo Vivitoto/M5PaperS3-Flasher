@@ -4,6 +4,8 @@
 
     <application
         android:label="Ink Flasher"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:extractNativeLibs="true"
         android:name="${applicationName}">
         <activity

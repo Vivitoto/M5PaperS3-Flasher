@@ -43,8 +43,8 @@ class FirmwareCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-            Text('Version / 版本: ${firmware.version}'),
-            Text('Size / 大小: ${firmware.sizeLabel}'),
+            Text('版本: ${firmware.version}'),
+            Text('大小: ${firmware.sizeLabel}'),
             const SizedBox(height: 10),
             Text(
               firmware.description,
@@ -63,21 +63,21 @@ class FirmwareCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   Text(downloadProgress == null
-                      ? 'Downloading... / 下载中...'
+                      ? '下载中...'
                       : '${(downloadProgress! * 100).clamp(0, 100).toStringAsFixed(0)}%'),
                   const Spacer(),
                 ] else ...[
                   FilledButton.icon(
                     onPressed: onDownload,
                     icon: const Icon(Icons.download),
-                    label: const Text('Download / 下载'),
+                    label: const Text('下载'),
                   ),
                   const SizedBox(width: 8),
                 ],
                 OutlinedButton.icon(
                   onPressed: onFlash,
                   icon: const Icon(Icons.flash_on),
-                  label: const Text('Flash / 刷写'),
+                  label: const Text('刷写'),
                 ),
               ],
             ),

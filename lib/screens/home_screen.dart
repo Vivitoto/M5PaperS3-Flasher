@@ -29,12 +29,12 @@ class _HomeScreenState extends State<HomeScreen> {
           NavigationDestination(
             icon: Icon(Icons.memory_outlined),
             selectedIcon: Icon(Icons.memory),
-            label: 'Firmware / 固件',
+            label: '固件',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),
             selectedIcon: Icon(Icons.settings),
-            label: 'Settings / 设置',
+            label: '设置',
           ),
         ],
       ),

@@ -11,7 +11,7 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace "com.vivitoto.m5papers3_flasher"
+    namespace "ink.flasher"
     compileSdk 34
 
     compileOptions {
@@ -24,7 +24,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.vivitoto.m5papers3_flasher"
+        applicationId "ink.flasher"
         minSdk 23
         targetSdk 34
         versionCode 1

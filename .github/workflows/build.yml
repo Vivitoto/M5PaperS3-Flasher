@@ -46,7 +46,7 @@ jobs:
           storePassword=android
           keyPassword=android
           keyAlias=androiddebugkey
-          storeFile=app/keystore/debug.keystore
+          storeFile=keystore/debug.keystore
           EOF
 
       - name: Build signed APK

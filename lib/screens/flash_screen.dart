@@ -17,8 +17,8 @@ class FlashScreen extends StatefulWidget {
 
 class _FlashScreenState extends State<FlashScreen> {
   final _flasher = EspFlasher();
-  List<dynamic> _devices = const [];
-  dynamic _selectedDevice;
+  List<String> _devices = const [];
+  String? _selectedDevice;
   FlashProgress? _progress;
   bool _busy = false;
   String? _status;
@@ -42,9 +42,9 @@ class _FlashScreenState extends State<FlashScreen> {
     setState(() => _baudRate = prefs.getInt('baudRate') ?? 115200);
   }
 
-  Future<void> _scanDevices() async {
+  void _scanDevices() {
     try {
-      final devices = await EspFlasher.listDevices();
+      final devices = EspFlasher.listDevices();
       setState(() {
         _devices = devices;
         _selectedDevice ??= devices.isNotEmpty ? devices.first : null;
@@ -57,7 +57,7 @@ class _FlashScreenState extends State<FlashScreen> {
   Future<void> _flash() async {
     final device = _selectedDevice;
     final path = widget.firmware.localPath;
-    if (device == null) {
+    if (device == null || device.isEmpty) {
       setState(() => _status = 'No USB serial device selected / 未选择 USB 串口设备');
       return;
     }
@@ -128,7 +128,7 @@ class _FlashScreenState extends State<FlashScreen> {
                       Expanded(
                         child: Text('USB Devices / USB 设备', style: Theme.of(context).textTheme.titleMedium),
                       ),
-                      IconButton(onPressed: _scanDevices, icon: const Icon(Icons.usb)),
+                      IconButton(onPressed: _scanDevices, icon: const Icon(Icons.refresh)),
                     ],
                   ),
                   if (_devices.isEmpty)
@@ -136,8 +136,8 @@ class _FlashScreenState extends State<FlashScreen> {
                   else
                     ..._devices.map((device) => ListTile(
                       dense: true,
-                      title: Text(device.toString()),
-                      leading: Radio<dynamic>(
+                      title: Text(device),
+                      leading: Radio<String>(
                         value: device,
                         groupValue: _selectedDevice,
                         onChanged: _busy ? null : (v) => setState(() => _selectedDevice = v),
@@ -179,7 +179,7 @@ class _FlashScreenState extends State<FlashScreen> {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Tip / 提示: connect M5PaperS3 over USB-C. The app toggles DTR/RTS to enter ESP32 download mode, then sends SYNC, FLASH_BEGIN, FLASH_DATA, FLASH_END packets using SLIP framing.',
+            'Tip / 提示: connect M5PaperS3 over USB-C OTG. The app toggles DTR/RTS to enter ESP32 download mode, then sends SYNC, FLASH_BEGIN, FLASH_DATA, FLASH_END packets using SLIP framing.',
             style: TextStyle(color: Colors.white54),
           ),
         ],

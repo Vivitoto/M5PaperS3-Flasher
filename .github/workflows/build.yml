@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -23,22 +26,30 @@ jobs:
           flutter-version: '3.24.0'
           channel: 'stable'
 
+      - name: Fix Android local.properties
+        run: |
+          FLUTTER_SDK=$(which flutter | sed 's|/bin/flutter||')
+          echo "flutter.sdk=$FLUTTER_SDK" > android/local.properties
+          cat android/local.properties
+
       - name: Get dependencies
         run: flutter pub get
 
       - name: Build APK
         run: flutter build apk --release
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+      - name: Release APK to GitHub
+        uses: softprops/action-gh-release@v2
         with:
-          name: m5papers3-flasher-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
-
-      - name: Release APK
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
-        with:
+          tag_name: latest
+          name: M5PaperS3 Flasher (latest)
+          body: |
+            自动构建的 M5PaperS3 烧录 App。
+            - 下载固件列表
+            - USB 串口烧录 ESP32
+            - 支持 M5Stack 官方 / EDC Book / 自制固件
           files: build/app/outputs/flutter-apk/app-release.apk
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

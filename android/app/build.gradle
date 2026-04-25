@@ -4,6 +4,12 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
+def appVersionName = "0.1.0"
+def appVersionPackageSuffix = "v" + appVersionName
+        .replaceAll(/[^A-Za-z0-9]+/, "_")
+        .replaceAll(/^_+|_+$/, "")
+        .toLowerCase()
+
 android {
     namespace "ink.flasher"
     compileSdk 35
@@ -18,11 +24,13 @@ android {
     }
 
     defaultConfig {
-        applicationId "ink.flasher"
+        // 每个版本使用独立 applicationId，便于历史 APK 并存安装。
+        // 例如 0.1.0 => ink.flasher.v0_1_0；App 显示名仍是 Ink Flasher。
+        applicationId "ink.flasher.${appVersionPackageSuffix}"
         minSdk 24
         targetSdk 35
         versionCode 1
-        versionName "0.1.0"
+        versionName appVersionName
     }
 
     signingConfigs {

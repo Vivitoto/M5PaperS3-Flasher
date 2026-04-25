@@ -46,7 +46,9 @@ jobs:
       - name: Rename APK
         run: |
           mkdir -p output
-          cp build/app/outputs/flutter-apk/app-release.apk output/ink-flasher.apk
+          VERSION=$(grep -E '^[[:space:]]*def appVersionName' android/app/build.gradle | sed -E 's/.*"([^"]+)".*/\1/')
+          VERSION_SUFFIX=$(echo "$VERSION" | sed -E 's/[^A-Za-z0-9]+/_/g; s/^_+|_+$//g')
+          cp build/app/outputs/flutter-apk/app-release.apk "output/ink-flasher-v${VERSION_SUFFIX}.apk"
 
       - name: Sign APK with apksigner
         run: |
@@ -56,7 +58,7 @@ jobs:
             --ks-pass pass:inkflasher \
             --key-pass pass:inkflasher \
             --ks-key-alias inkflasher \
-            output/ink-flasher.apk
+            output/ink-flasher-v*.apk
 
       - name: Verify APK signature
         run: |
@@ -72,7 +74,7 @@ jobs:
             Ink Flasher - M5PaperS3 固件刷写工具
             - 多源固件列表（M5Stack 社区 + 自制）
             - USB 串口一键烧录
-          files: output/ink-flasher.apk
+          files: output/ink-flasher-v*.apk
           draft: false
           prerelease: false
         env:

@@ -16,7 +16,7 @@ class M5PaperS3FlasherApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'M5PaperS3 Flasher',
+      title: 'Ink Flasher',
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.dark,
       darkTheme: ThemeData(

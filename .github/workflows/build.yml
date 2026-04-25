@@ -43,23 +43,25 @@ jobs:
       - name: Build APK
         run: flutter build apk --release
 
+      - name: Rename APK
+        run: |
+          mkdir -p output
+          cp build/app/outputs/flutter-apk/app-release.apk output/ink-flasher.apk
+
       - name: Sign APK with apksigner
         run: |
-          APK=build/app/outputs/flutter-apk/app-release.apk
           BUILD_TOOLS=$(ls -d $ANDROID_SDK_ROOT/build-tools/* | sort -V | tail -1)
-          echo "Using build-tools: $BUILD_TOOLS"
           $BUILD_TOOLS/apksigner sign \
             --ks android/app/keystore/release.keystore \
             --ks-pass pass:inkflasher \
             --key-pass pass:inkflasher \
             --ks-key-alias inkflasher \
-            $APK
+            output/ink-flasher.apk
 
       - name: Verify APK signature
         run: |
-          APK=build/app/outputs/flutter-apk/app-release.apk
           BUILD_TOOLS=$(ls -d $ANDROID_SDK_ROOT/build-tools/* | sort -V | tail -1)
-          $BUILD_TOOLS/apksigner verify -v $APK
+          $BUILD_TOOLS/apksigner verify -v output/ink-flasher.apk
 
       - name: Release APK to GitHub
         uses: softprops/action-gh-release@v2
@@ -67,11 +69,10 @@ jobs:
           tag_name: latest
           name: Ink Flasher (latest)
           body: |
-            自动构建的 Ink Flasher。
-            - 下载固件列表
-            - USB 串口烧录 ESP32
-            - 支持 M5Stack 官方 / EDC Book / 自制固件
-          files: build/app/outputs/flutter-apk/app-release.apk
+            Ink Flasher - M5PaperS3 固件刷写工具
+            - 多源固件列表（M5Stack 社区 + 自制）
+            - USB 串口一键烧录
+          files: output/ink-flasher.apk
           draft: false
           prerelease: false
         env:

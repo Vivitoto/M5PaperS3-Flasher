@@ -6,12 +6,12 @@ plugins {
 
 android {
     namespace "com.vivitoto.m5papers3_flasher"
-    compileSdk 35
+    compileSdk 34
 
     defaultConfig {
         applicationId "com.vivitoto.m5papers3_flasher"
         minSdk 23
-        targetSdk 35
+        targetSdk 34
         versionCode 1
         versionName "0.1.0"
     }

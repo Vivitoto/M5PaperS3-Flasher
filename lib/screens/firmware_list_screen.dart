@@ -125,17 +125,25 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Text(
-            'Ink Flasher',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '共 $count 个固件，下拉刷新',
-            style: const TextStyle(color: Colors.white70),
+          Image.asset('assets/images/ink_flasher_logo.png', width: 72, height: 72),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Ink Flasher',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '共 $count 个固件，下拉刷新',
+                  style: const TextStyle(color: Colors.white70),
+                ),
+              ],
+            ),
           ),
         ],
       ),

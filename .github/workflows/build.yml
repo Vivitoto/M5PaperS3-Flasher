@@ -35,16 +35,30 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Build APK
+      - name: Generate debug signing key
+        run: |
+          mkdir -p android/app/keystore
+          keytool -genkey -v -keystore android/app/keystore/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+
+      - name: Configure signing
+        run: |
+          cat > android/key.properties << 'EOF'
+          storePassword=android
+          keyPassword=android
+          keyAlias=androiddebugkey
+          storeFile=app/keystore/debug.keystore
+          EOF
+
+      - name: Build signed APK
         run: flutter build apk --release
 
       - name: Release APK to GitHub
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: M5PaperS3 Flasher (latest)
+          name: Ink Flasher (latest)
           body: |
-            自动构建的 M5PaperS3 烧录 App。
+            自动构建的 Ink Flasher。
             - 下载固件列表
             - USB 串口烧录 ESP32
             - 支持 M5Stack 官方 / EDC Book / 自制固件

@@ -5,7 +5,7 @@ allprojects {
     }
 }
 
-// Fix for AGP 8.1+ namespace requirement on older packages
+// Fix for AGP 8.1+ namespace requirement and JVM target compatibility
 subprojects {
     afterEvaluate { project ->
         if (project.hasProperty("android")) {
@@ -14,6 +14,16 @@ subprojects {
                     namespace project.group ?: "com.example.${project.name}"
                 }
                 compileSdkVersion 34
+                
+                compileOptions {
+                    sourceCompatibility JavaVersion.VERSION_17
+                    targetCompatibility JavaVersion.VERSION_17
+                }
+            }
+        }
+        if (project.plugins.hasPlugin("org.jetbrains.kotlin.android")) {
+            project.kotlin {
+                jvmToolchain(17)
             }
         }
     }
@@ -25,12 +35,6 @@ subprojects {
 }
 subprojects {
     project.evaluationDependsOn(":app")
-}
-
-// Fix JVM target compatibility
-tasks.withType(JavaCompile) {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
 }
 
 tasks.register("clean", Delete) {

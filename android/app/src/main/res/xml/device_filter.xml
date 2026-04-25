@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Common USB serial bridges used by ESP32 dev boards / M5Stack devices. -->
+    <usb-device vendor-id="4292" product-id="60000" /> <!-- Silicon Labs CP210x -->
+    <usb-device vendor-id="6790" product-id="29987" /> <!-- WCH CH340/CH341 -->
+    <usb-device vendor-id="1027" product-id="24577" /> <!-- FTDI FT232 -->
+    <usb-device vendor-id="12346" /> <!-- Espressif fallback vendor id decimal 0x303A -->
+</resources>

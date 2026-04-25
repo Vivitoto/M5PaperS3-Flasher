@@ -1,0 +1,22 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+android {
+    namespace "com.vivitoto.m5papers3_flasher"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.vivitoto.m5papers3_flasher"
+        minSdk 23
+        targetSdk 35
+        versionCode 1
+        versionName "0.1.0"
+    }
+}
+
+flutter {
+    source "../.."
+}

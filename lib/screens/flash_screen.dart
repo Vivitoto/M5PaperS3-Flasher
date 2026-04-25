@@ -50,7 +50,7 @@ class _FlashScreenState extends State<FlashScreen> {
         _selectedDevice ??= devices.isNotEmpty ? devices.first : null;
       });
     } catch (error) {
-      setState(() => _status = 'USB scan failed / USB 扫描失败: $error');
+      setState(() => _status = 'USB 扫描失败: $error');
     }
   }
 
@@ -58,17 +58,17 @@ class _FlashScreenState extends State<FlashScreen> {
     final device = _selectedDevice;
     final path = widget.firmware.localPath;
     if (device == null || device.isEmpty) {
-      setState(() => _status = 'No USB serial device selected / 未选择 USB 串口设备');
+      setState(() => _status = '未选择 USB 串口设备');
       return;
     }
     if (path == null || !await File(path).exists()) {
-      setState(() => _status = 'Firmware not downloaded / 固件尚未下载');
+      setState(() => _status = '固件尚未下载');
       return;
     }
 
     setState(() {
       _busy = true;
-      _status = 'Opening USB serial at $_baudRate baud / 正在打开串口';
+      _status = '正在打开串口 ($_baudRate 波特率)';
     });
 
     try {
@@ -82,11 +82,11 @@ class _FlashScreenState extends State<FlashScreen> {
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Flash complete / 刷写完成')),
+        const SnackBar(content: Text('刷写完成')),
       );
     } catch (error) {
       if (!mounted) return;
-      setState(() => _status = 'Flash failed / 刷写失败: $error');
+      setState(() => _status = '刷写失败: $error');
     } finally {
       await _flasher.close();
       if (mounted) setState(() => _busy = false);
@@ -97,7 +97,7 @@ class _FlashScreenState extends State<FlashScreen> {
   Widget build(BuildContext context) {
     final progress = _progress;
     return Scaffold(
-      appBar: AppBar(title: const Text('Flash Firmware / 刷写固件')),
+      appBar: AppBar(title: const Text('刷写固件')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -109,9 +109,9 @@ class _FlashScreenState extends State<FlashScreen> {
                 children: [
                   Text(widget.firmware.name, style: Theme.of(context).textTheme.headlineSmall),
                   const SizedBox(height: 8),
-                  Text('Version / 版本: ${widget.firmware.version}'),
-                  Text('Source / 来源: ${widget.firmware.sourceLabel}'),
-                  Text('Local file / 本地文件: ${widget.firmware.localPath ?? 'Not downloaded / 未下载'}'),
+                  Text('版本: ${widget.firmware.version}'),
+                  Text('来源: ${widget.firmware.sourceLabel}'),
+                  Text('本地文件: ${widget.firmware.localPath ?? '未下载'}'),
                 ],
               ),
             ),
@@ -126,13 +126,13 @@ class _FlashScreenState extends State<FlashScreen> {
                   Row(
                     children: [
                       Expanded(
-                        child: Text('USB Devices / USB 设备', style: Theme.of(context).textTheme.titleMedium),
+                        child: Text('USB 设备', style: Theme.of(context).textTheme.titleMedium),
                       ),
                       IconButton(onPressed: _scanDevices, icon: const Icon(Icons.refresh)),
                     ],
                   ),
                   if (_devices.isEmpty)
-                    const Text('No devices / 无设备', style: TextStyle(color: Colors.white54))
+                    const Text('无设备', style: TextStyle(color: Colors.white54))
                   else
                     ..._devices.map((device) => ListTile(
                       dense: true,
@@ -143,7 +143,7 @@ class _FlashScreenState extends State<FlashScreen> {
                         onChanged: _busy ? null : (v) => setState(() => _selectedDevice = v),
                       ),
                     )),
-                  Text('Baud rate / 波特率: $_baudRate'),
+                  Text('波特率: $_baudRate'),
                 ],
               ),
             ),
@@ -175,11 +175,11 @@ class _FlashScreenState extends State<FlashScreen> {
             icon: _busy
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                 : const Icon(Icons.flash_on),
-            label: const Text('Start Flash / 开始刷写'),
+            label: const Text('开始刷写'),
           ),
           const SizedBox(height: 8),
           const Text(
-            'Tip / 提示: connect M5PaperS3 over USB-C OTG. The app toggles DTR/RTS to enter ESP32 download mode, then sends SYNC, FLASH_BEGIN, FLASH_DATA, FLASH_END packets using SLIP framing.',
+            '提示: 通过 USB-C OTG 连接 M5PaperS3，点击开始刷写后自动进入下载模式并写入固件。',
             style: TextStyle(color: Colors.white54),
           ),
         ],

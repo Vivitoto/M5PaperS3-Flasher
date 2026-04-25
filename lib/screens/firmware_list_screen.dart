@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/firmware.dart';
 import '../services/download_manager.dart';
-import '../services/github_api.dart';
+import '../services/firmware_source.dart';
 import '../widgets/firmware_card.dart';
 import 'flash_screen.dart';
 
@@ -46,13 +46,13 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Download complete / 下载完成')),
+        const SnackBar(content: Text('下载完成')),
       );
     } catch (error) {
       if (!mounted) return;
       setState(() => _downloadProgress.remove(firmware.id));
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Download failed / 下载失败: $error')),
+        SnackBar(content: Text('下载失败: $error')),
       );
     }
   }
@@ -72,7 +72,7 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('M5PaperS3 Firmware / 固件'),
+        title: const Text('固件列表'),
         actions: [
           IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh)),
         ],
@@ -84,7 +84,7 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text('Load failed / 加载失败: ${snapshot.error}'));
+            return Center(child: Text('加载失败: ${snapshot.error}'));
           }
           final firmwares = snapshot.data ?? const <Firmware>[];
           return RefreshIndicator(
@@ -129,12 +129,12 @@ class _Header extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Ink Box style flasher / 类 Ink Box 刷机工具',
+            'Ink Flasher',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           Text(
-            '$count firmware sources. Pull down to refresh. / $count 个固件来源，下拉刷新。',
+            '共 $count 个固件，下拉刷新',
             style: const TextStyle(color: Colors.white70),
           ),
         ],

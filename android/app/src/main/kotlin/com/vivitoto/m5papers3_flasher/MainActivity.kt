@@ -1,4 +1,4 @@
-package com.vivitoto.m5papers3_flasher
+package ink.flasher
 
 import io.flutter.embedding.android.FlutterActivity
 

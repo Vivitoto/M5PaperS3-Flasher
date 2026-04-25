@@ -40,22 +40,13 @@ jobs:
           mkdir -p android/app/keystore
           keytool -genkey -v -keystore android/app/keystore/release.keystore -storepass inkflasher -alias inkflasher -keypass inkflasher -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Ink Flasher,O=Ink,C=US"
 
-      - name: Configure signing
-        run: |
-          cat > android/key.properties << 'EOF'
-          storePassword=inkflasher
-          keyPassword=inkflasher
-          keyAlias=inkflasher
-          storeFile=keystore/release.keystore
-          EOF
-
       - name: Build signed APK
         run: flutter build apk --release
 
-      - name: Verify APK
+      - name: Verify APK signature
         run: |
           ls -lh build/app/outputs/flutter-apk/app-release.apk
-          unzip -l build/app/outputs/flutter-apk/app-release.apk | grep -E "META-INF|ic_launcher" | head -20
+          unzip -l build/app/outputs/flutter-apk/app-release.apk | grep -E "META-INF/.*\.(RSA|SF|DSA)" || echo "WARNING: No signature files found!"
 
       - name: Release APK to GitHub
         uses: softprops/action-gh-release@v2

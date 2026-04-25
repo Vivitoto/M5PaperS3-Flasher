@@ -46,7 +46,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await prefs.setString('eraseOption', _eraseOption);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Settings saved / 设置已保存')),
+      const SnackBar(content: Text('设置已保存')),
     );
   }
 
@@ -58,7 +58,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings / 设置')),
+      appBar: AppBar(title: const Text('设置')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -68,14 +68,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Repository / 仓库', style: Theme.of(context).textTheme.titleLarge),
+                  Text('仓库', style: Theme.of(context).textTheme.titleLarge),
                   const SizedBox(height: 12),
                   TextField(
                     controller: _githubTokenController,
                     obscureText: true,
                     decoration: const InputDecoration(
-                      labelText: 'GitHub token (optional) / GitHub 令牌（可选）',
-                      helperText: 'Used for private repos or higher rate limits / 用于私有仓库或更高限额',
+                      labelText: 'GitHub 令牌（可选）',
+                      helperText: '用于私有仓库或更高 API 限额',
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -83,7 +83,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   TextField(
                     controller: _customUrlController,
                     decoration: const InputDecoration(
-                      labelText: 'Custom firmware URL / 自定义固件 URL',
+                      labelText: '自定义固件 URL',
                       hintText: 'https://example.com/firmware.bin',
                       border: OutlineInputBorder(),
                     ),
@@ -99,12 +99,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Flash options / 刷写选项', style: Theme.of(context).textTheme.titleLarge),
+                  Text('刷写选项', style: Theme.of(context).textTheme.titleLarge),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<int>(
                     value: _baudRate,
                     decoration: const InputDecoration(
-                      labelText: 'Baud rate / 波特率',
+                      labelText: '波特率',
                       border: OutlineInputBorder(),
                     ),
                     items: const [115200, 230400, 460800, 921600]
@@ -116,19 +116,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   DropdownButtonFormField<String>(
                     value: _eraseOption,
                     decoration: const InputDecoration(
-                      labelText: 'Erase option / 擦除选项',
+                      labelText: '擦除选项',
                       border: OutlineInputBorder(),
                     ),
                     items: const [
-                      DropdownMenuItem(value: 'none', child: Text('No erase / 不擦除')),
-                      DropdownMenuItem(value: 'all', child: Text('Erase all / 全部擦除')),
-                      DropdownMenuItem(value: 'sectors', child: Text('Erase sectors / 擦除扇区')),
+                      DropdownMenuItem(value: 'none', child: Text('不擦除')),
+                      DropdownMenuItem(value: 'all', child: Text('全部擦除')),
+                      DropdownMenuItem(value: 'sectors', child: Text('擦除扇区')),
                     ],
                     onChanged: (value) => setState(() => _eraseOption = value ?? 'none'),
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Erase options are stored for the flashing workflow; sector erase can be wired to a full esptool erase command later. / 擦除选项已保存，可后续接入完整 esptool 擦除命令。',
+                    '擦除选项已保存，后续可接入完整 esptool 擦除命令。',
                     style: TextStyle(color: Colors.white54),
                   ),
                 ],
@@ -139,12 +139,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           FilledButton.icon(
             onPressed: _save,
             icon: const Icon(Icons.save),
-            label: const Text('Save / 保存'),
+            label: const Text('保存'),
           ),
           TextButton.icon(
             onPressed: _openM5StackFlashMode,
             icon: const Icon(Icons.open_in_new),
-            label: const Text('Open M5Stack Flash Mode / 打开官方刷机目录'),
+            label: const Text('打开 M5Stack 官方刷机目录'),
           ),
         ],
       ),

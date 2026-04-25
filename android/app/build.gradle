@@ -8,6 +8,15 @@ android {
     namespace "com.vivitoto.m5papers3_flasher"
     compileSdk 34
 
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+
     defaultConfig {
         applicationId "com.vivitoto.m5papers3_flasher"
         minSdk 23

@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:usb_serial/usb_serial.dart';
 
 import '../models/firmware.dart';
 import '../services/esp_flasher.dart';
@@ -18,8 +17,8 @@ class FlashScreen extends StatefulWidget {
 
 class _FlashScreenState extends State<FlashScreen> {
   final _flasher = EspFlasher();
-  List<UsbDevice> _devices = const [];
-  UsbDevice? _selectedDevice;
+  List<dynamic> _devices = const [];
+  dynamic _selectedDevice;
   FlashProgress? _progress;
   bool _busy = false;
   String? _status;
@@ -132,20 +131,18 @@ class _FlashScreenState extends State<FlashScreen> {
                       IconButton(onPressed: _scanDevices, icon: const Icon(Icons.usb)),
                     ],
                   ),
-                  DropdownButton<UsbDevice>(
-                    isExpanded: true,
-                    value: _selectedDevice,
-                    hint: const Text('Select device / 选择设备'),
-                    items: _devices
-                        .map(
-                          (device) => DropdownMenuItem(
-                            value: device,
-                            child: Text('${device.productName ?? 'USB Serial'} (${device.vid}:${device.pid})'),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: _busy ? null : (device) => setState(() => _selectedDevice = device),
-                  ),
+                  if (_devices.isEmpty)
+                    const Text('No devices / 无设备', style: TextStyle(color: Colors.white54))
+                  else
+                    ..._devices.map((device) => ListTile(
+                      dense: true,
+                      title: Text(device.toString()),
+                      leading: Radio<dynamic>(
+                        value: device,
+                        groupValue: _selectedDevice,
+                        onChanged: _busy ? null : (v) => setState(() => _selectedDevice = v),
+                      ),
+                    )),
                   Text('Baud rate / 波特率: $_baudRate'),
                 ],
               ),

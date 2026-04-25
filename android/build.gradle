@@ -20,10 +20,11 @@ subprojects {
                     targetCompatibility JavaVersion.VERSION_17
                 }
             }
-        }
-        if (project.plugins.hasPlugin("org.jetbrains.kotlin.android")) {
-            project.kotlin {
-                jvmToolchain(17)
+            
+            if (project.plugins.hasPlugin("org.jetbrains.kotlin.android")) {
+                project.android.kotlinOptions {
+                    jvmTarget = '17'
+                }
             }
         }
     }

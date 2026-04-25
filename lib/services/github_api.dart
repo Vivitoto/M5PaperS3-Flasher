@@ -91,20 +91,29 @@ class FirmwareRepository {
   List<Firmware> _m5StackOfficialFirmwares() => const [
         Firmware(
           id: 'm5stack-m5papers3-factory',
-          name: 'M5PaperS3 Factory Demo',
-          version: 'official/latest',
+          name: 'M5PaperS3 Factory',
+          version: 'v2.0.9',
           description:
-              'M5Stack official factory/demo firmware placeholder. Update URL from api.m5stack.com flash_mode app.js if needed. / 官方演示固件占位，可替换为 M5Stack Flash Mode 中的真实地址。',
-          downloadUrl: 'https://static-cdn.m5stack.com/resource/docs/products/core/M5PaperS3/fw/M5PaperS3_Factory.bin',
+              'M5Stack official factory firmware. / M5Stack 官方出厂固件。',
+          downloadUrl: 'https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/docs/products/core/M5PaperS3/bin/M5PaperS3_FactoryTest.bin',
           source: FirmwareSource.m5stackOfficial,
         ),
         Firmware(
-          id: 'm5stack-m5papers3-core2paper',
-          name: 'M5PaperS3 Official UIFlow',
-          version: 'official/latest',
+          id: 'm5stack-m5papers3-uiflow2',
+          name: 'M5PaperS3 UIFlow2.0',
+          version: 'v2.0.9',
           description:
-              'Official M5Stack UIFlow/launcher firmware entry. / M5Stack 官方 UIFlow/启动器固件条目。',
-          downloadUrl: 'https://static-cdn.m5stack.com/resource/firmware/M5PaperS3/latest.bin',
+              'M5Stack official UIFlow2.0 launcher. / M5Stack 官方 UIFlow2.0 启动器。',
+          downloadUrl: 'https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/docs/products/core/M5PaperS3/bin/M5PaperS3_UIFlow2.0.bin',
+          source: FirmwareSource.m5stackOfficial,
+        ),
+        Firmware(
+          id: 'm5stack-m5papers3-arduino',
+          name: 'M5PaperS3 Arduino',
+          version: 'v2.0.9',
+          description:
+              'M5Stack official Arduino firmware. / M5Stack 官方 Arduino 固件。',
+          downloadUrl: 'https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/docs/products/core/M5PaperS3/bin/M5PaperS3_Arduino.bin',
           source: FirmwareSource.m5stackOfficial,
         ),
       ];
@@ -112,11 +121,11 @@ class FirmwareRepository {
   List<Firmware> _edcBookFirmwares() => const [
         Firmware(
           id: 'edcbook-m5papers3-release',
-          name: 'EDC Book for M5PaperS3',
-          version: 'latest',
+          name: 'EDC Book（梦西游）',
+          version: 'v3.x',
           description:
-              'EDC Book firmware entry from M5Stack Flash Mode catalogue / 来自 M5Stack Flash Mode 目录的 EDC Book 固件条目。',
-          downloadUrl: 'https://static-cdn.m5stack.com/resource/firmware/EDCBook/latest.bin',
+              'EDC Book e-reader firmware for M5PaperS3. / 梦西游电子书固件，适配 M5PaperS3。',
+          downloadUrl: 'https://github.com/dreamxiyou/edcbook/releases/download/latest/edcbook_m5papers3.bin',
           source: FirmwareSource.edcBook,
         ),
       ];

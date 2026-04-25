@@ -136,18 +136,25 @@ class VivitotoSource {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       final assets = (data['assets'] as List<dynamic>? ?? [])
           .cast<Map<String, dynamic>>();
-      final binAsset = assets.firstWhere(
-        (a) => (a['name'] as String).toLowerCase().endsWith('.bin'),
-        orElse: () => <String, dynamic>{},
-      );
+      final binAssets = assets
+          .where((a) => (a['name'] as String? ?? '').toLowerCase().endsWith('.bin'))
+          .toList();
+      if (binAssets.isEmpty) return null;
 
-      if (binAsset.isEmpty) return null;
+      // 统一烧录最完整镜像：包含 bootloader / partition / app / SPIFFS。
+      // 如果 Release 里没有完整镜像，就先不展示，避免把 app-only firmware.bin 错写到 0x0。
+      final fullAssets = binAssets.where((a) {
+        final name = (a['name'] as String? ?? '').toLowerCase();
+        return name.contains('full') || name.contains('complete') || name.contains('factory') || name.contains('16mb');
+      }).toList();
+      if (fullAssets.isEmpty) return null;
+      final binAsset = fullAssets.first;
 
       return Firmware(
         id: 'vivitoto-${data['tag_name'] ?? 'latest'}',
         name: 'M5PaperS3 Ebook（自制）',
         version: (data['tag_name'] ?? 'latest').toString(),
-        description: 'Vivitoto 自制固件，基于 M5PaperS3',
+        description: 'Vivitoto 自制完整镜像，包含分区表、固件和字库/Web资源',
         downloadUrl: binAsset['browser_download_url'] as String,
         sizeBytes: binAsset['size'] as int?,
         releaseUrl: data['html_url'] as String?,

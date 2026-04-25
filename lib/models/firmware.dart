@@ -21,6 +21,7 @@ class Firmware {
     this.hash,
     this.releaseUrl,
     this.localPath,
+    this.flashOffset = 0,
   });
 
   final String id;
@@ -33,6 +34,8 @@ class Firmware {
   final FirmwareHash? hash;
   final String? releaseUrl;
   final String? localPath;
+  /// ESP32 flash offset. Full 16MB images are written at 0x0.
+  final int flashOffset;
 
   Firmware copyWith({
     String? id,
@@ -45,6 +48,7 @@ class Firmware {
     FirmwareHash? hash,
     String? releaseUrl,
     String? localPath,
+    int? flashOffset,
   }) {
     return Firmware(
       id: id ?? this.id,
@@ -57,6 +61,7 @@ class Firmware {
       hash: hash ?? this.hash,
       releaseUrl: releaseUrl ?? this.releaseUrl,
       localPath: localPath ?? this.localPath,
+      flashOffset: flashOffset ?? this.flashOffset,
     );
   }
 

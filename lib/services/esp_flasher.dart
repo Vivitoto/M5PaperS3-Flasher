@@ -27,7 +27,9 @@ class EspFlasher {
   static const int flashDataCommand = 0x03;
   static const int flashEndCommand = 0x04;
   static const int blockSize = 0x400;
-  static const int defaultFlashOffset = 0x10000;
+  // Ink Flasher 统一烧录完整镜像：bootloader + partition + app + resources。
+  // 完整镜像必须从 0x0 开始写入。
+  static const int defaultFlashOffset = 0x0;
 
   SerialPort? _port;
   SerialPortReader? _reader;
@@ -127,7 +129,7 @@ class EspFlasher {
         writtenBytes: written,
         totalBytes: bytes.length,
         speedBytesPerSecond: elapsed <= 0 ? 0 : written / elapsed,
-        stage: 'Writing firmware / 正在刷写',
+        stage: flashOffset == 0 ? '正在刷写完整镜像' : '正在刷写固件',
       );
     }
 

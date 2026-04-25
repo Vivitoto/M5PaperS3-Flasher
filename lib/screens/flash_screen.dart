@@ -73,7 +73,7 @@ class _FlashScreenState extends State<FlashScreen> {
 
     try {
       await _flasher.connect(device, baudRate: _baudRate);
-      await for (final progress in _flasher.flashFile(File(path))) {
+      await for (final progress in _flasher.flashFile(File(path), flashOffset: widget.firmware.flashOffset)) {
         if (!mounted) return;
         setState(() {
           _progress = progress;
@@ -112,6 +112,7 @@ class _FlashScreenState extends State<FlashScreen> {
                   Text('版本: ${widget.firmware.version}'),
                   Text('来源: ${widget.firmware.sourceLabel}'),
                   Text('本地文件: ${widget.firmware.localPath ?? '未下载'}'),
+                  Text("烧录模式: ${widget.firmware.flashOffset == 0 ? '完整镜像(0x0)' : 'App分区(0x${widget.firmware.flashOffset.toRadixString(16)})'}"),
                 ],
               ),
             ),
@@ -179,7 +180,7 @@ class _FlashScreenState extends State<FlashScreen> {
           ),
           const SizedBox(height: 8),
           const Text(
-            '提示: 通过 USB-C OTG 连接 M5PaperS3，点击开始刷写后自动进入下载模式并写入固件。',
+            '提示: 通过 USB-C OTG 连接 M5PaperS3，点击开始刷写后自动进入下载模式。默认写入完整镜像，包含分区表、固件和资源。',
             style: TextStyle(color: Colors.white54),
           ),
         ],

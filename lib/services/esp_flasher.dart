@@ -196,7 +196,7 @@ class EspFlasher {
       payload.add(0x55);
     }
     await _sendCommand(syncCommand, Uint8List.fromList(payload));
-    await _readSlipPacket(timeout: const Duration(seconds: 2));
+    await _readCommandResponse(syncCommand, timeout: const Duration(seconds: 2), checkStatus: false);
   }
 
   Future<void> flashBegin(int size, int offset) async {
@@ -207,7 +207,7 @@ class EspFlasher {
     data.add(_u32(blockSize));
     data.add(_u32(offset));
     await _sendCommand(flashBeginCommand, data.toBytes());
-    await _readSlipPacket();
+    await _readCommandResponse(flashBeginCommand, timeout: const Duration(seconds: 180));
   }
 
   Future<void> flashData(Uint8List block, int sequence) async {
@@ -218,17 +218,48 @@ class EspFlasher {
     data.add(_u32(0));
     data.add(block);
     await _sendCommand(flashDataCommand, data.toBytes(), checksum: _checksum(block));
-    await _readSlipPacket();
+    await _readCommandResponse(flashDataCommand);
   }
 
   Future<void> flashEnd({bool reboot = true}) async {
     await _sendCommand(flashEndCommand, _u32(reboot ? 0 : 1));
-    await _readSlipPacket();
+    await _readCommandResponse(flashEndCommand);
   }
 
   Future<void> eraseFlash() async {
     await _sendCommand(eraseFlashCommand, Uint8List(0));
-    await _readSlipPacket(timeout: const Duration(seconds: 180));
+    await _readCommandResponse(eraseFlashCommand, timeout: const Duration(seconds: 180));
+  }
+
+  Future<Uint8List> _readCommandResponse(
+    int command, {
+    Duration timeout = const Duration(seconds: 5),
+    bool checkStatus = true,
+  }) async {
+    for (var retry = 0; retry < 100; retry++) {
+      final packet = await _readSlipPacket(timeout: timeout);
+      if (packet.length < 8) continue;
+      final response = packet[0];
+      final op = packet[1];
+      if (response != 0x01 || op != command) continue;
+
+      final dataLength = packet[2] | (packet[3] << 8);
+      final data = packet.sublist(8);
+      if (data.length < dataLength) {
+        throw StateError('ESP32 响应长度异常: command=0x${command.toRadixString(16)}');
+      }
+      if (checkStatus) {
+        if (data.length < 2) {
+          throw StateError('ESP32 未返回写入状态: command=0x${command.toRadixString(16)}');
+        }
+        if (data[0] != 0) {
+          final reason = data.length > 1 ? data[1] : 0;
+          throw StateError('ESP32 拒绝烧录命令: command=0x${command.toRadixString(16)}, status=${data[0]}, reason=$reason');
+        }
+      }
+      return Uint8List.fromList(data);
+    }
+    throw TimeoutException('ESP32 未确认烧录命令: 0x${command.toRadixString(16)}');
   }
 
   Future<void> _sendCommand(int command, Uint8List data, {int checksum = 0}) async {

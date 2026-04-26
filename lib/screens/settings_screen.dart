@@ -125,10 +125,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   String _baudRateLabel(int rate) {
     return switch (rate) {
-      115200 => '115200 · 最稳',
-      230400 => '230400 · 稳定',
-      460800 => '460800 · 较快',
-      921600 => '921600 · 最快',
+      115200 => '115200 · 稳定模式',
+      230400 => '230400 · 预留',
+      460800 => '460800 · 预留',
+      921600 => '921600 · 预留',
       _ => '$rate',
     };
   }

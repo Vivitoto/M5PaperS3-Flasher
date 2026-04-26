@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -23,6 +24,7 @@ class _FlashScreenState extends State<FlashScreen> {
   bool _busy = false;
   bool _scanning = false;
   String? _status;
+  final List<String> _logs = [];
   int _baudRate = 115200;
   String _burnMode = 'fast';
 
@@ -56,16 +58,27 @@ class _FlashScreenState extends State<FlashScreen> {
 
   String get _burnModeLabel => _burnMode == 'clean' ? '彻底烧录' : '快速烧录';
 
+  void _addLog(String message) {
+    final now = DateTime.now();
+    final time = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
+    setState(() {
+      _logs.add('[$time] $message');
+      if (_logs.length > 120) _logs.removeRange(0, _logs.length - 120);
+    });
+  }
+
   Future<void> _scanDevices() async {
     setState(() => _scanning = true);
     try {
       final devices = await EspFlasher.listDevices();
       if (!mounted) return;
+      String? logMessage;
       setState(() {
         _devices = devices;
         if (devices.isEmpty) {
           _selectedDevice = null;
           _status = '未发现 USB 设备，请确认手机支持 OTG，并重新插拔设备后刷新';
+          logMessage = '未发现 USB 设备';
         } else {
           final current = _selectedDevice;
           _selectedDevice = current == null
@@ -74,12 +87,15 @@ class _FlashScreenState extends State<FlashScreen> {
                   (device) => device.id == current.id,
                   orElse: () => devices.first,
                 );
-          _status = '发现 ${devices.length} 个 USB 设备，首次刷写时请在系统弹窗中允许访问';
+          _status = '发现 ${devices.length} 个 USB 设备，首次连接时系统可能会询问权限';
+          logMessage = '发现 ${devices.length} 个 USB 设备: ${_selectedDevice?.label ?? ''}';
         }
       });
+      if (logMessage != null) _addLog(logMessage!);
     } catch (error) {
       if (!mounted) return;
       setState(() => _status = 'USB 扫描失败: $error');
+      _addLog('USB 扫描失败: $error');
     } finally {
       if (mounted) setState(() => _scanning = false);
     }
@@ -99,11 +115,24 @@ class _FlashScreenState extends State<FlashScreen> {
 
     setState(() {
       _busy = true;
-      _status = '正在申请 USB 权限并打开串口（烧录速度 $_baudRate）';
+      _progress = null;
+      _logs.clear();
+      _status = '正在打开 USB 串口（如系统询问权限请选择允许）';
     });
+    _addLog('准备烧录: ${widget.firmware.name} ${widget.firmware.version}');
+    _addLog('本地文件: $path');
+    _addLog('固件大小: ${await File(path).length()} bytes');
+    _addLog('烧录模式: $_burnModeLabel, offset=0x${widget.firmware.flashOffset.toRadixString(16)}');
+    _addLog('打开 USB 串口: ${device.label}');
 
     try {
-      await _flasher.connect(device, baudRate: _baudRate);
+      // ESP32-S3 ROM bootloader sync is most reliable at 115200.
+      // Higher-speed switching needs an explicit CHANGE_BAUD command after sync;
+      // until that is implemented, keep the actual bootloader connection stable.
+      await _flasher.connect(device, baudRate: 115200);
+      _addLog('USB 串口已打开，开始连接 ESP32 下载模式');
+      String? lastStage;
+      int lastPercent = -1;
       await for (final progress in _flasher.flashFile(
         File(path),
         flashOffset: widget.firmware.flashOffset,
@@ -113,15 +142,31 @@ class _FlashScreenState extends State<FlashScreen> {
         setState(() {
           _progress = progress;
           _status = progress.stage;
+          final percent = progress.percent.floor();
+          if (progress.stage != lastStage) {
+            lastStage = progress.stage;
+            _logs.add('[${DateTime.now().hour.toString().padLeft(2, '0')}:${DateTime.now().minute.toString().padLeft(2, '0')}:${DateTime.now().second.toString().padLeft(2, '0')}] ${progress.stage}');
+          } else if (percent >= 0 && percent != lastPercent && percent % 10 == 0) {
+            lastPercent = percent;
+            _logs.add('[${DateTime.now().hour.toString().padLeft(2, '0')}:${DateTime.now().minute.toString().padLeft(2, '0')}:${DateTime.now().second.toString().padLeft(2, '0')}] 写入进度 $percent%');
+          }
         });
       }
       if (!mounted) return;
+      _addLog('刷写完成，设备正在重启');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('刷写完成')),
       );
+    } on TimeoutException {
+      if (!mounted) return;
+      setState(() {
+        _status = '未连接到 ESP32 下载模式。请按住设备 BOOT/下载键，再短按 RESET 或重新插入 USB，然后重试。';
+      });
+      _addLog('失败: ESP32 下载模式连接超时');
     } catch (error) {
       if (!mounted) return;
       setState(() => _status = '刷写失败: $error');
+      _addLog('失败: $error');
     } finally {
       await _flasher.close();
       if (mounted) setState(() => _busy = false);
@@ -189,7 +234,7 @@ class _FlashScreenState extends State<FlashScreen> {
                             onChanged: _busy ? null : (_) => setState(() => _selectedDevice = device),
                           ),
                         )),
-                  Text('烧录速度: $_baudRate'),
+                  Text('烧录速度: 115200（稳定模式）'),
                 ],
               ),
             ),
@@ -216,6 +261,46 @@ class _FlashScreenState extends State<FlashScreen> {
               padding: const EdgeInsets.symmetric(vertical: 12),
               child: Text(_status!, style: const TextStyle(color: Colors.white70)),
             ),
+          if (_logs.isNotEmpty) ...[
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: Text('烧录日志', style: Theme.of(context).textTheme.titleMedium)),
+                        TextButton(
+                          onPressed: _busy ? null : () => setState(_logs.clear),
+                          child: const Text('清空'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      constraints: const BoxConstraints(maxHeight: 220),
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF101011),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFF2B2B2E)),
+                      ),
+                      child: SingleChildScrollView(
+                        reverse: true,
+                        child: SelectableText(
+                          _logs.join('\n'),
+                          style: const TextStyle(fontSize: 11, height: 1.35, color: Colors.white70, fontFamily: 'monospace'),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           FilledButton.icon(
             onPressed: _busy ? null : _flash,
             icon: _busy
@@ -225,7 +310,7 @@ class _FlashScreenState extends State<FlashScreen> {
           ),
           const SizedBox(height: 8),
           const Text(
-            '提示: 通过 USB-C OTG 连接目标设备，点击开始刷写后会弹出系统 USB 授权窗口，请选择允许。Vink 默认写入完整镜像，包含分区表、固件和资源。彻底烧录会先清空设备闪存，耗时更长。',
+            '提示: 通过 USB-C OTG 连接目标设备。首次连接时系统可能会询问 USB 权限，请选择允许；如果没有弹窗但能看到设备，通常表示已授权。若一直卡在连接引导模式，请按住 BOOT/下载键后重置或重新插入 USB。',
             style: TextStyle(color: Colors.white54),
           ),
         ],

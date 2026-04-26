@@ -94,6 +94,12 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
               itemCount: firmwares.length + 1,
               itemBuilder: (context, index) {
                 if (index == 0) return _Header(count: firmwares.length);
+                if (firmwares.isEmpty) {
+                  return const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Center(child: Text('暂无可用自制固件，请稍后刷新')),
+                  );
+                }
                 final firmware = firmwares[index - 1];
                 return FirmwareCard(
                   firmware: firmware,
@@ -139,7 +145,7 @@ class _Header extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '共 $count 个固件，下拉刷新',
+                  '自制固件源 · 共 $count 个版本，下拉刷新',
                   style: const TextStyle(color: Colors.white70),
                 ),
               ],

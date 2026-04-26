@@ -45,13 +45,34 @@ class FirmwareCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text('版本: ${firmware.version}'),
             Text('大小: ${firmware.sizeLabel}'),
+            Text('烧录: ${firmware.flashOffset == 0 ? '完整镜像' : 'App分区'}'),
             const SizedBox(height: 10),
             Text(
               firmware.description,
-              maxLines: 4,
+              maxLines: 3,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white70),
             ),
+            if (firmware.changelog.trim().isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Theme(
+                data: theme.copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: EdgeInsets.zero,
+                  title: const Text('更新内容'),
+                  children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        firmware.changelog,
+                        style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white70),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             Row(
               children: [

@@ -17,6 +17,7 @@ class Firmware {
     required this.description,
     required this.downloadUrl,
     required this.source,
+    this.changelog = '',
     this.sizeBytes,
     this.hash,
     this.releaseUrl,
@@ -30,6 +31,7 @@ class Firmware {
   final String description;
   final String downloadUrl;
   final FirmwareSource source;
+  final String changelog;
   final int? sizeBytes;
   final FirmwareHash? hash;
   final String? releaseUrl;
@@ -44,6 +46,7 @@ class Firmware {
     String? description,
     String? downloadUrl,
     FirmwareSource? source,
+    String? changelog,
     int? sizeBytes,
     FirmwareHash? hash,
     String? releaseUrl,
@@ -57,6 +60,7 @@ class Firmware {
       description: description ?? this.description,
       downloadUrl: downloadUrl ?? this.downloadUrl,
       source: source ?? this.source,
+      changelog: changelog ?? this.changelog,
       sizeBytes: sizeBytes ?? this.sizeBytes,
       hash: hash ?? this.hash,
       releaseUrl: releaseUrl ?? this.releaseUrl,

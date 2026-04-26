@@ -21,6 +21,7 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
   final Map<String, String> _localPaths = {};
   final Map<String, LocalFirmwareStatus> _localStatus = {};
   final Map<String, int> _partialBytes = {};
+  String _selectedDevice = 'papers3';
 
   @override
   void initState() {
@@ -113,6 +114,20 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
     );
   }
 
+  String _deviceIdOf(Firmware firmware) {
+    final text = '${firmware.id} ${firmware.name} ${firmware.description}'.toLowerCase();
+    if (text.contains('papers3') || text.contains('paper s3')) return 'papers3';
+    return 'other';
+  }
+
+  List<_DeviceFilter> _deviceFilters(List<Firmware> firmwares) {
+    final ids = firmwares.map(_deviceIdOf).toSet();
+    return [
+      if (ids.contains('papers3')) const _DeviceFilter(id: 'papers3', label: 'M5Stack Paper S3'),
+      if (ids.contains('other')) const _DeviceFilter(id: 'other', label: '其他设备'),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -132,22 +147,39 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
             return Center(child: Text('加载失败: ${snapshot.error}'));
           }
           final firmwares = snapshot.data ?? const <Firmware>[];
+          final filters = _deviceFilters(firmwares);
+          if (filters.isNotEmpty && !filters.any((item) => item.id == _selectedDevice)) {
+            _selectedDevice = filters.first.id;
+          }
+          final filtered = firmwares.where((firmware) => _deviceIdOf(firmware) == _selectedDevice).toList();
+
           return RefreshIndicator(
             onRefresh: _refresh,
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 22),
               children: [
-                _Header(count: firmwares.length),
-                const SizedBox(height: 16),
+                if (filters.isNotEmpty) ...[
+                  _DeviceFilterBar(
+                    filters: filters,
+                    selected: _selectedDevice,
+                    onSelected: (id) => setState(() => _selectedDevice = id),
+                  ),
+                  const SizedBox(height: 10),
+                ],
                 if (firmwares.isEmpty)
                   const Padding(
                     padding: EdgeInsets.all(24),
                     child: Center(child: Text('暂无可用 Vink 固件，请稍后刷新')),
                   )
+                else if (filtered.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Center(child: Text('当前设备暂无固件')),
+                  )
                 else
                   FirmwareCard(
-                    firmwares: firmwares,
+                    firmwares: filtered,
                     isDownloading: (firmware) => _downloadProgress.containsKey(firmware.id),
                     downloadProgress: (firmware) => _downloadProgress[firmware.id],
                     localStatus: (firmware) => _localStatus[firmware.id] ?? LocalFirmwareStatus.none,
@@ -169,77 +201,64 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
   }
 }
 
-class _Header extends StatelessWidget {
-  const _Header({required this.count});
+class _DeviceFilter {
+  const _DeviceFilter({required this.id, required this.label});
 
-  final int count;
+  final String id;
+  final String label;
+}
+
+class _DeviceFilterBar extends StatelessWidget {
+  const _DeviceFilterBar({
+    required this.filters,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final List<_DeviceFilter> filters;
+  final String selected;
+  final ValueChanged<String> onSelected;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: const Color(0xFF151516),
-        borderRadius: BorderRadius.circular(30),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: const Color(0xFF2B2B2E)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(22),
-            child: Image.asset('assets/images/vink_flasher_logo.png', width: 72, height: 72),
+          Text(
+            '选择设备',
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: Colors.white54,
+              fontWeight: FontWeight.w700,
+            ),
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
               children: [
-                Text(
-                  'Vink Flasher',
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.6,
+                for (final filter in filters) ...[
+                  ChoiceChip(
+                    label: Text(filter.label),
+                    selected: selected == filter.id,
+                    onSelected: (_) => onSelected(filter.id),
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Vink 系列烧录器',
-                  style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white70),
-                ),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _Pill(text: 'PaperS3'),
-                    _Pill(text: '${count <= 1 ? 0 : count - 1} 个历史版本'),
-                  ],
-                ),
+                  const SizedBox(width: 8),
+                ],
               ],
             ),
           ),
         ],
       ),
-    );
-  }
-}
-
-class _Pill extends StatelessWidget {
-  const _Pill({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: const Color(0xFF222224),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: const Color(0xFF333336)),
-      ),
-      child: Text(text, style: const TextStyle(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.w600)),
     );
   }
 }

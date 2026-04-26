@@ -37,7 +37,7 @@ class FirmwareCard extends StatelessWidget {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -50,17 +50,18 @@ class FirmwareCard extends StatelessWidget {
                     children: [
                       Text(
                         latest.name,
-                        style: theme.textTheme.titleLarge?.copyWith(
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontSize: 19,
                           fontWeight: FontWeight.w800,
                           letterSpacing: -0.3,
                         ),
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 4),
                       Text(
                         latest.description,
-                        maxLines: 2,
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white60),
+                        style: theme.textTheme.bodySmall?.copyWith(color: Colors.white60),
                       ),
                     ],
                   ),
@@ -72,23 +73,23 @@ class FirmwareCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             Wrap(
-              spacing: 8,
-              runSpacing: 8,
+              spacing: 6,
+              runSpacing: 6,
               children: [
                 _MetaPill(icon: Icons.tag_rounded, text: latest.version),
                 _MetaPill(icon: Icons.sd_storage_outlined, text: latest.sizeLabel),
                 _MetaPill(icon: Icons.memory_rounded, text: latest.flashOffset == 0 ? '完整镜像' : 'App分区'),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             _LocalStatusLine(
               status: status,
               partialBytes: partialBytes(latest),
               totalBytes: latest.sizeBytes,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             _ChangelogTile(
               title: '最新更新内容',
               subtitle: latest.description,
@@ -102,8 +103,8 @@ class FirmwareCard extends StatelessWidget {
                 child: ExpansionTile(
                   tilePadding: EdgeInsets.zero,
                   childrenPadding: EdgeInsets.zero,
-                  title: Text('历史版本', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                  subtitle: Text('${history.length} 个版本', style: const TextStyle(color: Colors.white54)),
+                  title: Text('历史版本', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                  subtitle: Text('${history.length} 个版本', style: const TextStyle(color: Colors.white54, fontSize: 12)),
                   children: [
                     for (final item in history)
                       _ChangelogTile(
@@ -117,7 +118,7 @@ class FirmwareCard extends StatelessWidget {
                 ),
               ),
             ],
-            const SizedBox(height: 18),
+            const SizedBox(height: 12),
             if (downloading)
               _Downloading(progress: progress)
             else
@@ -160,7 +161,7 @@ class _MetaPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
         color: const Color(0xFF202022),
         borderRadius: BorderRadius.circular(999),
@@ -169,9 +170,9 @@ class _MetaPill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: Colors.white70),
+          Icon(icon, size: 13, color: Colors.white70),
           const SizedBox(width: 5),
-          Text(text, style: const TextStyle(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.w600)),
+          Text(text, style: const TextStyle(fontSize: 11, color: Colors.white70, fontWeight: FontWeight.w600)),
         ],
       ),
     );
@@ -186,7 +187,7 @@ class _Downloading extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: const Color(0xFF202022),
         borderRadius: BorderRadius.circular(18),
@@ -194,8 +195,8 @@ class _Downloading extends StatelessWidget {
       ),
       child: Row(
         children: [
-          SizedBox(width: 26, height: 26, child: CircularProgressIndicator(value: progress, strokeWidth: 3)),
-          const SizedBox(width: 12),
+          SizedBox(width: 22, height: 22, child: CircularProgressIndicator(value: progress, strokeWidth: 2.5)),
+          const SizedBox(width: 10),
           Text(progress == null ? '下载中...' : '${(progress! * 100).clamp(0, 100).toStringAsFixed(0)}%'),
         ],
       ),
@@ -227,17 +228,17 @@ class _LocalStatusLine extends StatelessWidget {
     };
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: const Color(0xFF101011),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: const Color(0xFF2B2B2E)),
       ),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: color),
+          Icon(icon, size: 16, color: color),
           const SizedBox(width: 8),
-          Expanded(child: Text(text, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w600))),
+          Expanded(child: Text(text, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600))),
         ],
       ),
     );
@@ -280,7 +281,7 @@ class _ChangelogTile extends StatelessWidget {
         initiallyExpanded: initiallyExpanded,
         title: Text(
           title,
-          style: dense ? theme.textTheme.titleSmall : theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+          style: dense ? theme.textTheme.labelLarge : theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
         ),
         subtitle: dense && subtitle.trim().isNotEmpty
             ? Text(_plainChangelog(subtitle), maxLines: 1, overflow: TextOverflow.ellipsis)
@@ -290,7 +291,7 @@ class _ChangelogTile extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: Text(
               text,
-              style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white60, height: 1.45),
+              style: theme.textTheme.bodySmall?.copyWith(color: Colors.white60, height: 1.4),
             ),
           ),
         ],

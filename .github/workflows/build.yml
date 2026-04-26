@@ -26,6 +26,11 @@ jobs:
           flutter-version: '3.24.0'
           channel: 'stable'
 
+      - name: Setup Python for Chaquopy
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
       - name: Fix Android local.properties
         run: |
           FLUTTER_SDK=$(which flutter | sed 's|/bin/flutter||')

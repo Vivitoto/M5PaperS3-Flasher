@@ -57,6 +57,7 @@ android {
 chaquopy {
     defaultConfig {
         version "3.11"
+        buildPython "python3.11"
         pip {
             install "bitstring==3.1.9"
             install "esptool==4.8.1"

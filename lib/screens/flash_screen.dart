@@ -17,10 +17,11 @@ class FlashScreen extends StatefulWidget {
 
 class _FlashScreenState extends State<FlashScreen> {
   final _flasher = EspFlasher();
-  List<String> _devices = const [];
-  String? _selectedDevice;
+  List<SerialDeviceInfo> _devices = const [];
+  SerialDeviceInfo? _selectedDevice;
   FlashProgress? _progress;
   bool _busy = false;
+  bool _scanning = false;
   String? _status;
   int _baudRate = 115200;
 
@@ -42,22 +43,39 @@ class _FlashScreenState extends State<FlashScreen> {
     setState(() => _baudRate = prefs.getInt('baudRate') ?? 115200);
   }
 
-  void _scanDevices() {
+  Future<void> _scanDevices() async {
+    setState(() => _scanning = true);
     try {
-      final devices = EspFlasher.listDevices();
+      final devices = await EspFlasher.listDevices();
+      if (!mounted) return;
       setState(() {
         _devices = devices;
-        _selectedDevice ??= devices.isNotEmpty ? devices.first : null;
+        if (devices.isEmpty) {
+          _selectedDevice = null;
+          _status = '未发现 USB 设备，请确认手机支持 OTG，并重新插拔设备后刷新';
+        } else {
+          final current = _selectedDevice;
+          _selectedDevice = current == null
+              ? devices.first
+              : devices.firstWhere(
+                  (device) => device.id == current.id,
+                  orElse: () => devices.first,
+                );
+          _status = '发现 ${devices.length} 个 USB 设备，首次刷写时请在系统弹窗中允许访问';
+        }
       });
     } catch (error) {
+      if (!mounted) return;
       setState(() => _status = 'USB 扫描失败: $error');
+    } finally {
+      if (mounted) setState(() => _scanning = false);
     }
   }
 
   Future<void> _flash() async {
     final device = _selectedDevice;
     final path = widget.firmware.localPath;
-    if (device == null || device.isEmpty) {
+    if (device == null) {
       setState(() => _status = '未选择 USB 串口设备');
       return;
     }
@@ -68,7 +86,7 @@ class _FlashScreenState extends State<FlashScreen> {
 
     setState(() {
       _busy = true;
-      _status = '正在打开串口 ($_baudRate 波特率)';
+      _status = '正在申请 USB 权限并打开串口 ($_baudRate 波特率)';
     });
 
     try {
@@ -129,21 +147,30 @@ class _FlashScreenState extends State<FlashScreen> {
                       Expanded(
                         child: Text('USB 设备', style: Theme.of(context).textTheme.titleMedium),
                       ),
-                      IconButton(onPressed: _scanDevices, icon: const Icon(Icons.refresh)),
+                      IconButton(
+                        onPressed: _busy || _scanning ? null : _scanDevices,
+                        icon: _scanning
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.refresh),
+                      ),
                     ],
                   ),
                   if (_devices.isEmpty)
                     const Text('无设备', style: TextStyle(color: Colors.white54))
                   else
                     ..._devices.map((device) => ListTile(
-                      dense: true,
-                      title: Text(device),
-                      leading: Radio<String>(
-                        value: device,
-                        groupValue: _selectedDevice,
-                        onChanged: _busy ? null : (v) => setState(() => _selectedDevice = v),
-                      ),
-                    )),
+                          dense: true,
+                          title: Text(device.label),
+                          leading: Radio<String>(
+                            value: device.id,
+                            groupValue: _selectedDevice?.id,
+                            onChanged: _busy ? null : (_) => setState(() => _selectedDevice = device),
+                          ),
+                        )),
                   Text('波特率: $_baudRate'),
                 ],
               ),
@@ -180,7 +207,7 @@ class _FlashScreenState extends State<FlashScreen> {
           ),
           const SizedBox(height: 8),
           const Text(
-            '提示: 通过 USB-C OTG 连接目标设备，点击开始刷写后自动进入下载模式。Vink 固件默认写入完整镜像，包含分区表、固件和资源。',
+            '提示: 通过 USB-C OTG 连接目标设备，点击开始刷写后会弹出系统 USB 授权窗口，请选择允许。Vink 固件默认写入完整镜像，包含分区表、固件和资源。',
             style: TextStyle(color: Colors.white54),
           ),
         ],

@@ -3,7 +3,19 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:flutter_libserialport/flutter_libserialport.dart';
+import 'package:usb_serial/usb_serial.dart';
+
+class SerialDeviceInfo {
+  const SerialDeviceInfo({
+    required this.id,
+    required this.label,
+    required this.device,
+  });
+
+  final String id;
+  final String label;
+  final UsbDevice device;
+}
 
 class FlashProgress {
   const FlashProgress({
@@ -31,63 +43,87 @@ class EspFlasher {
   // 完整镜像必须从 0x0 开始写入。
   static const int defaultFlashOffset = 0x0;
 
-  SerialPort? _port;
-  SerialPortReader? _reader;
+  UsbPort? _port;
   StreamSubscription<Uint8List>? _subscription;
   final List<int> _rxBuffer = [];
-  final _rxCompleter = Completer<void>.sync();
+  Completer<void>? _rxCompleter;
 
-  static List<String> listDevices() => SerialPort.availablePorts;
+  static Future<List<SerialDeviceInfo>> listDevices() async {
+    final devices = await UsbSerial.listDevices();
+    return [
+      for (final device in devices)
+        SerialDeviceInfo(
+          id: device.deviceName ?? '${device.vid}:${device.pid}',
+          label: _deviceLabel(device),
+          device: device,
+        ),
+    ];
+  }
 
-  Future<void> connect(String portName, {int baudRate = 115200}) async {
-    final port = SerialPort(portName);
-    if (!port.openReadWrite()) {
-      throw Exception('Unable to open serial port: ${port.name}');
+  static String _deviceLabel(UsbDevice device) {
+    final parts = <String>[
+      if ((device.productName ?? '').isNotEmpty) device.productName!,
+      if ((device.manufacturerName ?? '').isNotEmpty) device.manufacturerName!,
+      if ((device.deviceName ?? '').isNotEmpty) device.deviceName!,
+      'VID:${device.vid?.toRadixString(16) ?? 'unknown'} PID:${device.pid?.toRadixString(16) ?? 'unknown'}',
+    ];
+    return parts.join(' · ');
+  }
+
+  Future<void> connect(SerialDeviceInfo deviceInfo, {int baudRate = 115200}) async {
+    final port = await deviceInfo.device.create();
+    if (port == null) {
+      throw Exception('无法创建 USB 串口: ${deviceInfo.label}');
     }
 
-    port.config.baudRate = baudRate;
-    port.config.bits = 8;
-    port.config.stopBits = 1;
-    port.config.parity = SerialPortParity.none;
-    port.config.setFlowControl(SerialPortFlowControl.none);
-    port.config.dtr = SerialPortDtr.off;
-    port.config.rts = SerialPortRts.off;
+    final opened = await port.open();
+    if (!opened) {
+      throw Exception('无法打开 USB 串口，请在系统弹窗中允许 Vink Flasher 访问 USB 设备');
+    }
+
+    await port.setPortParameters(
+      baudRate,
+      UsbPort.DATABITS_8,
+      UsbPort.STOPBITS_1,
+      UsbPort.PARITY_NONE,
+    );
+    await port.setDTR(false);
+    await port.setRTS(false);
 
     _port = port;
-    _reader = SerialPortReader(port);
-    _subscription = _reader!.stream.listen((data) {
+    _subscription = port.inputStream?.listen((data) {
       _rxBuffer.addAll(data);
-      if (!_rxCompleter.isCompleted) {
-        _rxCompleter.complete();
+      final completer = _rxCompleter;
+      if (completer != null && !completer.isCompleted) {
+        completer.complete();
       }
     });
   }
 
   Future<void> close() async {
     await _subscription?.cancel();
-    _reader?.close();
-    _port?.close();
+    await _port?.close();
     _subscription = null;
-    _reader = null;
     _port = null;
     _rxBuffer.clear();
+    _rxCompleter = null;
   }
 
   Future<void> enterBootloader() async {
     final port = _requirePort();
-    
+
     // ESP32 bootloader sequence:
     // DTR=false, RTS=true → wait 100ms
     // DTR=true, RTS=false → wait 50ms
     // DTR=false, RTS=false → wait 250ms
-    port.config.dtr = SerialPortDtr.off;
-    port.config.rts = SerialPortRts.on;
+    await port.setDTR(false);
+    await port.setRTS(true);
     await Future<void>.delayed(const Duration(milliseconds: 100));
-    port.config.dtr = SerialPortDtr.on;
-    port.config.rts = SerialPortRts.off;
+    await port.setDTR(true);
+    await port.setRTS(false);
     await Future<void>.delayed(const Duration(milliseconds: 50));
-    port.config.dtr = SerialPortDtr.off;
-    port.config.rts = SerialPortRts.off;
+    await port.setDTR(false);
+    await port.setRTS(false);
     await Future<void>.delayed(const Duration(milliseconds: 250));
   }
 
@@ -185,7 +221,7 @@ class EspFlasher {
     packet.add(_u16(data.length));
     packet.add(_u32(checksum));
     packet.add(data);
-    _requirePort().write(_slipEncode(packet.toBytes()));
+    await _requirePort().write(_slipEncode(packet.toBytes()));
   }
 
   Future<Uint8List> _readSlipPacket({Duration timeout = const Duration(seconds: 5)}) async {
@@ -198,7 +234,11 @@ class EspFlasher {
         final decoded = _slipDecode(raw);
         if (decoded.isNotEmpty) return decoded;
       }
-      await Future<void>.delayed(const Duration(milliseconds: 20));
+      _rxCompleter = Completer<void>();
+      await _rxCompleter!.future.timeout(
+        const Duration(milliseconds: 20),
+        onTimeout: () {},
+      );
     }
     throw TimeoutException('Timed out waiting for ESP32 response.');
   }
@@ -247,7 +287,7 @@ class EspFlasher {
     return checksum;
   }
 
-  SerialPort _requirePort() {
+  UsbPort _requirePort() {
     final port = _port;
     if (port == null) throw StateError('Serial port is not connected.');
     return port;

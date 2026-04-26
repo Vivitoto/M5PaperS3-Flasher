@@ -96,3 +96,15 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Archive APK to history release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-history
+          name: Vink Flasher APK History
+          body_path: apk-history/README.md
+          files: output/vink-flasher-v*.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

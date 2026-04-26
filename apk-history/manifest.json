@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "project": "Vink-Flasher",
+  "historyRelease": "https://github.com/Vivitoto/Vink-Flasher/releases/tag/apk-history",
+  "latestRelease": "https://github.com/Vivitoto/Vink-Flasher/releases/tag/latest",
+  "versions": [
+    {
+      "version": "0.3.0+21",
+      "apk": "vink-flasher-v0_3_0.apk",
+      "status": "archived-via-ci",
+      "releasedAt": "2026-04-26",
+      "recommended": true,
+      "summary": "Refactored flashing backend to Android Chaquopy/Python with official esptool.py for better stability."
+    },
+    {
+      "version": "0.2.13+20",
+      "apk": "vink-flasher-v0_2_13.apk",
+      "status": "binary-missing-after-latest-cleanup",
+      "releasedAt": "2026-04-26",
+      "recommended": false,
+      "summary": "Last Dart handwritten ESP32 flashing backend release; superseded by v0.3.0."
+    }
+  ]
+}

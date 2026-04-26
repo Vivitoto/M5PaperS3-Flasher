@@ -63,7 +63,7 @@ jobs:
       - name: Verify APK signature
         run: |
           BUILD_TOOLS=$(ls -d $ANDROID_SDK_ROOT/build-tools/* | sort -V | tail -1)
-          $BUILD_TOOLS/apksigner verify -v output/ink-flasher.apk
+          $BUILD_TOOLS/apksigner verify -v output/ink-flasher-v*.apk
 
       - name: Release APK to GitHub
         uses: softprops/action-gh-release@v2

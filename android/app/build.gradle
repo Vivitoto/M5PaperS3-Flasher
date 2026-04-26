@@ -33,14 +33,6 @@ android {
             abiFilters "arm64-v8a", "armeabi-v7a"
         }
 
-        python {
-            version "3.11"
-            pip {
-                install "bitstring==3.1.9"
-                install "esptool==4.8.1"
-                install "pyserial==3.5"
-            }
-        }
     }
 
     signingConfigs {
@@ -58,6 +50,17 @@ android {
             signingConfig signingConfigs.release
             minifyEnabled false
             shrinkResources false
+        }
+    }
+}
+
+chaquopy {
+    defaultConfig {
+        version "3.11"
+        pip {
+            install "bitstring==3.1.9"
+            install "esptool==4.8.1"
+            install "pyserial==3.5"
         }
     }
 }

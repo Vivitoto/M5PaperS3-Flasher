@@ -5,10 +5,7 @@ plugins {
 }
 
 def appVersionName = "0.1.1"
-def appVersionPackageSuffix = "v" + appVersionName
-        .replaceAll(/[^A-Za-z0-9]+/, "_")
-        .replaceAll(/^_+|_+$/, "")
-        .toLowerCase()
+def appVersionCode = 2
 
 android {
     namespace "ink.flasher"
@@ -24,21 +21,21 @@ android {
     }
 
     defaultConfig {
-        // 每个版本使用独立 applicationId，便于历史 APK 并存安装。
-        // 例如 0.1.0 => ink.flasher.v0_1_0；App 显示名仍是 Ink Flasher。
-        applicationId "ink.flasher.${appVersionPackageSuffix}"
+        // 固定 applicationId，后续版本覆盖安装；App 显示名仍是 Ink Flasher。
+        applicationId "ink.flasher"
         minSdk 24
         targetSdk 35
-        versionCode 1
+        versionCode appVersionCode
         versionName appVersionName
     }
 
     signingConfigs {
         release {
             storeFile file("keystore/release.keystore")
-            storePassword "inkflasher"
-            keyAlias "inkflasher"
-            keyPassword "inkflasher"
+            storeType "pkcs12"
+            storePassword System.getenv("INK_FLASHER_STORE_PASSWORD") ?: "inkflasher"
+            keyAlias System.getenv("INK_FLASHER_KEY_ALIAS") ?: "inkflasher"
+            keyPassword System.getenv("INK_FLASHER_KEY_PASSWORD") ?: "inkflasher"
         }
     }
 

@@ -1,4 +1,4 @@
-package ink.flasher
+package vink.flasher
 
 import io.flutter.embedding.android.FlutterActivity
 

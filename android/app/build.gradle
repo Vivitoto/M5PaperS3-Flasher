@@ -8,7 +8,7 @@ def appVersionName = "0.2.0"
 def appVersionCode = 7
 
 android {
-    namespace "ink.flasher"
+    namespace "vink.flasher"
     compileSdk 35
 
     compileOptions {
@@ -21,8 +21,8 @@ android {
     }
 
     defaultConfig {
-        // 固定 applicationId，后续版本覆盖安装；App 显示名为 Vink Flasher。
-        applicationId "ink.flasher"
+        // Vink Flasher 统一包名；改包名后与旧版不是同一个 App。
+        applicationId "vink.flasher"
         minSdk 24
         targetSdk 35
         versionCode appVersionCode

@@ -38,6 +38,7 @@ class EspFlasher {
   static const int flashBeginCommand = 0x02;
   static const int flashDataCommand = 0x03;
   static const int flashEndCommand = 0x04;
+  static const int eraseFlashCommand = 0xD0;
   static const int blockSize = 0x400;
   // Vink Flasher 优先烧录完整镜像：bootloader + partition + app + resources。
   // 完整镜像必须从 0x0 开始写入。
@@ -130,6 +131,7 @@ class EspFlasher {
   Stream<FlashProgress> flashFile(
     File firmware, {
     int flashOffset = defaultFlashOffset,
+    bool eraseBeforeWrite = false,
     bool reboot = true,
   }) async* {
     final bytes = await firmware.readAsBytes();
@@ -144,11 +146,21 @@ class EspFlasher {
     await enterBootloader();
     await sync();
 
+    if (eraseBeforeWrite) {
+      yield FlashProgress(
+        writtenBytes: 0,
+        totalBytes: bytes.length,
+        speedBytesPerSecond: 0,
+        stage: '正在清空设备闪存',
+      );
+      await eraseFlash();
+    }
+
     yield FlashProgress(
       writtenBytes: 0,
       totalBytes: bytes.length,
       speedBytesPerSecond: 0,
-      stage: 'Begin flash / 开始写入',
+      stage: '开始写入固件',
     );
     await flashBegin(bytes.length, flashOffset);
 
@@ -212,6 +224,11 @@ class EspFlasher {
   Future<void> flashEnd({bool reboot = true}) async {
     await _sendCommand(flashEndCommand, _u32(reboot ? 0 : 1));
     await _readSlipPacket();
+  }
+
+  Future<void> eraseFlash() async {
+    await _sendCommand(eraseFlashCommand, Uint8List(0));
+    await _readSlipPacket(timeout: const Duration(seconds: 180));
   }
 
   Future<void> _sendCommand(int command, Uint8List data, {int checksum = 0}) async {

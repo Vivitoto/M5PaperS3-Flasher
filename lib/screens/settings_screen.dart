@@ -16,7 +16,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _customUrlController = TextEditingController();
   final _updateService = AppUpdateService();
   int _baudRate = 115200;
-  String _eraseOption = 'none';
+  String _burnMode = 'fast';
   AppUpdateInfo? _updateInfo;
   bool _checkingUpdate = false;
   bool _downloadingUpdate = false;
@@ -42,8 +42,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _githubTokenController.text = prefs.getString('githubToken') ?? '';
       _customUrlController.text = prefs.getString('customFirmwareUrl') ?? '';
       _baudRate = prefs.getInt('baudRate') ?? 115200;
-      _eraseOption = prefs.getString('eraseOption') ?? 'none';
+      _burnMode = _normalizeBurnMode(prefs.getString('eraseOption'));
     });
+  }
+
+  String _normalizeBurnMode(String? value) {
+    return switch (value) {
+      'clean' || 'all' => 'clean',
+      _ => 'fast',
+    };
   }
 
   Future<void> _save() async {
@@ -51,7 +58,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await prefs.setString('githubToken', _githubTokenController.text.trim());
     await prefs.setString('customFirmwareUrl', _customUrlController.text.trim());
     await prefs.setInt('baudRate', _baudRate);
-    await prefs.setString('eraseOption', _eraseOption);
+    await prefs.setString('eraseOption', _burnMode);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('设置已保存')),
@@ -123,6 +130,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (bytes >= 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
     return '$bytes B';
   }
+
+  String _baudRateLabel(int rate) {
+    return switch (rate) {
+      115200 => '115200 · 最稳',
+      230400 => '230400 · 稳定',
+      460800 => '460800 · 较快',
+      921600 => '921600 · 最快',
+      _ => '$rate',
+    };
+  }
+
+  String get _burnModeSummary => _burnMode == 'clean'
+      ? '先清空设备闪存，再写入完整固件；适合异常修复或换固件。'
+      : '直接写入完整固件，不额外清空整颗闪存；适合日常升级。';
 
   @override
   Widget build(BuildContext context) {
@@ -202,32 +223,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 12),
           _Section(
-            title: '刷写',
-            subtitle: '串口速度与擦除策略',
+            title: '烧录设置',
+            subtitle: '控制烧录速度，以及烧录前是否清空设备闪存',
             children: [
               DropdownButtonFormField<int>(
                 value: _baudRate,
-                decoration: const InputDecoration(labelText: '波特率'),
+                decoration: const InputDecoration(
+                  labelText: '烧录速度',
+                  helperText: '也叫波特率。数值越高传输越快；如果烧录失败或中断，调低会更稳。',
+                ),
                 items: const [115200, 230400, 460800, 921600]
-                    .map((rate) => DropdownMenuItem(value: rate, child: Text('$rate')))
+                    .map((rate) => DropdownMenuItem(value: rate, child: Text(_baudRateLabel(rate))))
                     .toList(),
                 onChanged: (value) => setState(() => _baudRate = value ?? 115200),
               ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: _eraseOption,
-                decoration: const InputDecoration(labelText: '擦除选项'),
-                items: const [
-                  DropdownMenuItem(value: 'none', child: Text('不擦除')),
-                  DropdownMenuItem(value: 'all', child: Text('全部擦除')),
-                  DropdownMenuItem(value: 'sectors', child: Text('擦除扇区')),
+              const SizedBox(height: 18),
+              Text(
+                '烧录模式',
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 8),
+              _BurnModeCard(
+                selected: _burnMode == 'fast',
+                title: '快速烧录',
+                badge: '推荐',
+                bullets: const [
+                  '直接写入完整固件，不额外清空整颗闪存。',
+                  '速度更快，适合正常升级、重复烧录同一个 Vink 固件。',
+                  '大多数情况下选这个就够了。',
                 ],
-                onChanged: (value) => setState(() => _eraseOption = value ?? 'none'),
+                onTap: () => setState(() => _burnMode = 'fast'),
               ),
               const SizedBox(height: 10),
+              _BurnModeCard(
+                selected: _burnMode == 'clean',
+                title: '彻底烧录',
+                badge: '修复用',
+                bullets: const [
+                  '先清空设备闪存，再写入完整固件。',
+                  '更干净，但耗时更长。',
+                  '适合从其他固件切换、设备异常、资源/配置残留导致问题时使用。',
+                ],
+                onTap: () => setState(() => _burnMode = 'clean'),
+              ),
+              const SizedBox(height: 12),
               Text(
-                '擦除选项已保存，后续可接入完整 esptool 擦除命令。',
-                style: theme.textTheme.bodySmall?.copyWith(color: Colors.white54),
+                '当前选择：$_burnModeSummary',
+                style: theme.textTheme.bodySmall?.copyWith(color: Colors.white54, height: 1.35),
               ),
             ],
           ),
@@ -276,6 +318,114 @@ class _Section extends StatelessWidget {
             ...children,
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _BurnModeCard extends StatelessWidget {
+  const _BurnModeCard({
+    required this.selected,
+    required this.title,
+    required this.badge,
+    required this.bullets,
+    required this.onTap,
+  });
+
+  final bool selected;
+  final String title;
+  final String badge;
+  final List<String> bullets;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final borderColor = selected ? Colors.white : Colors.white12;
+    final backgroundColor = selected ? Colors.white.withOpacity(0.08) : Colors.white.withOpacity(0.03);
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: backgroundColor,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: borderColor, width: selected ? 1.3 : 1),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Icon(
+                selected ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+                color: selected ? Colors.white : Colors.white38,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: selected ? Colors.white : Colors.white10,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          badge,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: selected ? Colors.black : Colors.white70,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ...bullets.map((text) => _Bullet(text: text)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Bullet extends StatelessWidget {
+  const _Bullet({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('• ', style: TextStyle(color: Colors.white54, height: 1.35)),
+          Expanded(
+            child: Text(
+              text,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.white60, height: 1.35),
+            ),
+          ),
+        ],
       ),
     );
   }

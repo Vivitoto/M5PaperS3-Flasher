@@ -72,7 +72,7 @@ class Firmware {
   String get sourceLabel {
     switch (source) {
       case FirmwareSource.vink:
-        return 'Vink 官方';
+        return 'Vink';
       case FirmwareSource.m5stackOfficial:
         return 'M5Stack 官方';
       case FirmwareSource.m5stackCommunity:

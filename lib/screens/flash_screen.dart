@@ -24,6 +24,7 @@ class _FlashScreenState extends State<FlashScreen> {
   bool _scanning = false;
   String? _status;
   int _baudRate = 115200;
+  String _burnMode = 'fast';
 
   @override
   void initState() {
@@ -40,8 +41,20 @@ class _FlashScreenState extends State<FlashScreen> {
 
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    setState(() => _baudRate = prefs.getInt('baudRate') ?? 115200);
+    setState(() {
+      _baudRate = prefs.getInt('baudRate') ?? 115200;
+      _burnMode = _normalizeBurnMode(prefs.getString('eraseOption'));
+    });
   }
+
+  String _normalizeBurnMode(String? value) {
+    return switch (value) {
+      'clean' || 'all' => 'clean',
+      _ => 'fast',
+    };
+  }
+
+  String get _burnModeLabel => _burnMode == 'clean' ? '彻底烧录' : '快速烧录';
 
   Future<void> _scanDevices() async {
     setState(() => _scanning = true);
@@ -86,12 +99,16 @@ class _FlashScreenState extends State<FlashScreen> {
 
     setState(() {
       _busy = true;
-      _status = '正在申请 USB 权限并打开串口 ($_baudRate 波特率)';
+      _status = '正在申请 USB 权限并打开串口（烧录速度 $_baudRate）';
     });
 
     try {
       await _flasher.connect(device, baudRate: _baudRate);
-      await for (final progress in _flasher.flashFile(File(path), flashOffset: widget.firmware.flashOffset)) {
+      await for (final progress in _flasher.flashFile(
+        File(path),
+        flashOffset: widget.firmware.flashOffset,
+        eraseBeforeWrite: _burnMode == 'clean',
+      )) {
         if (!mounted) return;
         setState(() {
           _progress = progress;
@@ -130,7 +147,8 @@ class _FlashScreenState extends State<FlashScreen> {
                   Text('版本: ${widget.firmware.version}'),
                   Text('来源: ${widget.firmware.sourceLabel}'),
                   Text('本地文件: ${widget.firmware.localPath ?? '未下载'}'),
-                  Text("烧录模式: ${widget.firmware.flashOffset == 0 ? '完整镜像(0x0)' : 'App分区(0x${widget.firmware.flashOffset.toRadixString(16)})'}"),
+                  Text('固件类型: ${widget.firmware.flashOffset == 0 ? '完整镜像 (0x0)' : 'App 分区 (0x${widget.firmware.flashOffset.toRadixString(16)})'}'),
+                  Text('烧录模式: $_burnModeLabel'),
                 ],
               ),
             ),
@@ -171,7 +189,7 @@ class _FlashScreenState extends State<FlashScreen> {
                             onChanged: _busy ? null : (_) => setState(() => _selectedDevice = device),
                           ),
                         )),
-                  Text('波特率: $_baudRate'),
+                  Text('烧录速度: $_baudRate'),
                 ],
               ),
             ),
@@ -207,7 +225,7 @@ class _FlashScreenState extends State<FlashScreen> {
           ),
           const SizedBox(height: 8),
           const Text(
-            '提示: 通过 USB-C OTG 连接目标设备，点击开始刷写后会弹出系统 USB 授权窗口，请选择允许。Vink 固件默认写入完整镜像，包含分区表、固件和资源。',
+            '提示: 通过 USB-C OTG 连接目标设备，点击开始刷写后会弹出系统 USB 授权窗口，请选择允许。Vink 默认写入完整镜像，包含分区表、固件和资源。彻底烧录会先清空设备闪存，耗时更长。'
             style: TextStyle(color: Colors.white54),
           ),
         ],

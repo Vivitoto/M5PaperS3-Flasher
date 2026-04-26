@@ -9,6 +9,23 @@ APK 二进制文件不直接放在源码树里，避免 Git 仓库被大文件�
 
 ## 版本记录
 
+### v0.3.2+23 / `vink-flasher-v0_3_2.apk`
+
+发布时间：2026-04-26
+
+归档位置：
+
+- Latest: <https://github.com/Vivitoto/Vink-Flasher/releases/download/latest/vink-flasher-v0_3_2.apk>
+- History: <https://github.com/Vivitoto/Vink-Flasher/releases/download/apk-history/vink-flasher-v0_3_2.apk>
+
+更新内容：
+
+- 修复 Chaquopy 接收到 Kotlin `ArrayList` 参数后 Python 侧直接迭代导致的 `TypeError: 'ArrayList' object is not iterable`。
+- esptool bridge 现在会把 Java/Kotlin List、Iterator、Array 统一转换成 Python list 后再调用官方 esptool。
+- 修复烧录设置里的波特率没有传给 USB 授权连接和 esptool 实际烧录流程的问题。
+- 强化固件清单 / GitHub Release JSON 解析，避免数字和 Map/List 类型转换导致界面加载失败。
+- 强化固件和应用更新下载校验，避免断点续传 416 或大小不一致时误把半截文件当完整文件。
+
 ### v0.3.1+22 / `vink-flasher-v0_3_1.apk`
 
 发布时间：2026-04-26

@@ -30,29 +30,27 @@ class VinkSource {
         throw Exception('Vink 固件清单请求失败: ${response.statusCode}');
       }
 
-      final manifest = jsonDecode(response.body) as Map<String, dynamic>;
-      final device = (manifest['device'] ?? 'unknown').toString();
-      final firmwareName = (manifest['firmwareName'] ?? 'Vink-$device').toString();
-      final releases = (manifest['releases'] as List<dynamic>? ?? [])
-          .cast<Map<String, dynamic>>();
+      final manifest = _asMap(jsonDecode(response.body));
+      final device = _asString(manifest['device'], fallback: 'unknown');
+      final firmwareName = _asString(manifest['firmwareName'], fallback: 'Vink-$device');
+      final releases = _asList(manifest['releases']).map(_asMap);
 
       for (final release in releases) {
-        final version = (release['version'] ?? '').toString();
+        final version = _asString(release['version']);
         if (version.isEmpty) continue;
 
-        final assets = (release['assets'] as Map<String, dynamic>? ?? {})
-            .cast<String, dynamic>();
+        final assets = _asMap(release['assets']);
         final selectedAsset = _selectFlashAsset(assets);
         if (selectedAsset == null) continue;
 
-        final asset = selectedAsset.cast<String, dynamic>();
-        final assetName = (asset['name'] ?? '').toString();
-        final downloadUrl = (asset['url'] ?? '').toString();
+        final asset = _asMap(selectedAsset);
+        final assetName = _asString(asset['name']);
+        final downloadUrl = _asString(asset['url']);
         if (downloadUrl.isEmpty) continue;
 
-        final changelog = (release['changelog'] ?? '').toString().trim();
-        final summary = (release['summary'] ?? '').toString().trim();
-        final releaseName = (release['name'] ?? firmwareName).toString();
+        final changelog = _asString(release['changelog']).trim();
+        final summary = _asString(release['summary']).trim();
+        final releaseName = _asString(release['name'], fallback: firmwareName);
 
         results.add(Firmware(
           id: 'vink-$device-$version-${assetName.hashCode}',
@@ -61,10 +59,10 @@ class VinkSource {
           description: summary.isEmpty ? _summary(changelog, releaseName) : summary,
           changelog: changelog.isEmpty ? '暂无更新说明' : changelog,
           downloadUrl: downloadUrl,
-          sizeBytes: asset['size'] as int?,
-          releaseUrl: release['releaseUrl'] as String?,
+          sizeBytes: _asInt(asset['size']),
+          releaseUrl: _asNullableString(release['releaseUrl']),
           source: FirmwareSource.vink,
-          flashOffset: asset['flashOffset'] as int? ?? 0,
+          flashOffset: _asInt(asset['flashOffset']) ?? 0,
         ));
       }
     }
@@ -72,14 +70,41 @@ class VinkSource {
     return results;
   }
 
+  Map<String, dynamic> _asMap(Object? value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return value.map((key, value) => MapEntry(key.toString(), value));
+    return <String, dynamic>{};
+  }
+
+  List<dynamic> _asList(Object? value) {
+    if (value is List) return value;
+    return const <dynamic>[];
+  }
+
+  String _asString(Object? value, {String fallback = ''}) {
+    if (value == null) return fallback;
+    final text = value.toString();
+    return text.isEmpty ? fallback : text;
+  }
+
+  String? _asNullableString(Object? value) {
+    final text = _asString(value);
+    return text.isEmpty ? null : text;
+  }
+
+  int? _asInt(Object? value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value.trim());
+    return null;
+  }
+
   Map<String, dynamic>? _selectFlashAsset(Map<String, dynamic> assets) {
     // App 默认烧录完整包。旧历史版本如果没有 full，只作为历史说明兼容回退。
     final preferred = assets['full'] ?? assets['factory'] ?? assets['complete'] ?? assets['ota'];
-    if (preferred is Map<String, dynamic>) return preferred;
-    if (preferred is Map) return preferred.cast<String, dynamic>();
+    if (preferred is Map) return _asMap(preferred);
     for (final value in assets.values) {
-      if (value is Map<String, dynamic>) return value;
-      if (value is Map) return value.cast<String, dynamic>();
+      if (value is Map) return _asMap(value);
     }
     return null;
   }
@@ -103,7 +128,23 @@ class FirmwareRepository {
 
   Future<List<Firmware>> fetchAllFirmwares() async {
     final results = await _vinkSource.fetchFirmwares();
-    results.sort((a, b) => b.version.compareTo(a.version));
+    results.sort((a, b) => _compareVersions(b.version, a.version));
     return results;
+  }
+
+  int _compareVersions(String a, String b) {
+    final left = _versionParts(a);
+    final right = _versionParts(b);
+    final length = left.length > right.length ? left.length : right.length;
+    for (var i = 0; i < length; i++) {
+      final l = i < left.length ? left[i] : 0;
+      final r = i < right.length ? right[i] : 0;
+      if (l != r) return l.compareTo(r);
+    }
+    return a.compareTo(b);
+  }
+
+  List<int> _versionParts(String version) {
+    return RegExp(r'\d+').allMatches(version).map((match) => int.parse(match.group(0)!)).toList();
   }
 }

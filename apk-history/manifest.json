@@ -5,11 +5,19 @@
   "latestRelease": "https://github.com/Vivitoto/Vink-Flasher/releases/tag/latest",
   "versions": [
     {
-      "version": "0.3.1+22",
-      "apk": "vink-flasher-v0_3_1.apk",
+      "version": "0.3.2+23",
+      "apk": "vink-flasher-v0_3_2.apk",
       "status": "pending-release",
       "releasedAt": "2026-04-26",
       "recommended": true,
+      "summary": "Fix Chaquopy bridge conversion for Kotlin ArrayList esptool arguments."
+    },
+    {
+      "version": "0.3.1+22",
+      "apk": "vink-flasher-v0_3_1.apk",
+      "status": "archived-via-ci",
+      "releasedAt": "2026-04-26",
+      "recommended": false,
       "summary": "Fix Chaquopy Java class loading for Android USB serial bridge."
     },
     {

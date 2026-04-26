@@ -83,6 +83,39 @@ class ForwardingBuffer:
         return None
 
 
+def _to_python_list(value):
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)):
+        return list(value)
+
+    size = getattr(value, "size", None)
+    getter = getattr(value, "get", None)
+    if callable(size) and callable(getter):
+        return [getter(index) for index in range(size())]
+
+    iterator_factory = getattr(value, "iterator", None)
+    if callable(iterator_factory):
+        iterator = iterator_factory()
+        items = []
+        while iterator.hasNext():
+            items.append(iterator.next())
+        return items
+
+    to_array = getattr(value, "toArray", None)
+    if callable(to_array):
+        array = to_array()
+        try:
+            return [array[index] for index in range(len(array))]
+        except TypeError:
+            pass
+
+    try:
+        return list(value)
+    except TypeError:
+        return [value]
+
+
 def _normalize_exit_code(code):
     if code is None:
         return 0
@@ -110,7 +143,7 @@ def run_esptool(context, arguments, callback=None):
             else:
                 argv = shlex.split(arguments)
         else:
-            argv = [str(arg) for arg in arguments]
+            argv = [str(arg) for arg in _to_python_list(arguments)]
 
         stream = ForwardingBuffer(output, callback)
         with redirect_stdout(stream), redirect_stderr(stream):

@@ -48,18 +48,17 @@ class AppUpdateService {
       throw Exception('检查更新失败: HTTP ${response.statusCode}');
     }
 
-    final json = jsonDecode(response.body) as Map<String, dynamic>;
-    final assets = (json['assets'] as List<dynamic>? ?? [])
-        .cast<Map<String, dynamic>>();
+    final json = _asMap(jsonDecode(response.body));
+    final assets = _asList(json['assets']).map(_asMap);
     final apk = assets.firstWhere(
-      (asset) => (asset['name'] as String? ?? '').toLowerCase().endsWith('.apk'),
+      (asset) => _asString(asset['name']).toLowerCase().endsWith('.apk'),
       orElse: () => <String, dynamic>{},
     );
     if (apk.isEmpty) {
       throw Exception('latest Release 中没有 APK');
     }
 
-    final apkName = (apk['name'] ?? '').toString();
+    final apkName = _asString(apk['name']);
     final latestVersion = _versionFromApkName(apkName) ?? currentVersion;
 
     return AppUpdateInfo(
@@ -67,10 +66,10 @@ class AppUpdateService {
       latestVersion: latestVersion,
       hasUpdate: _compareVersions(latestVersion, currentVersion) > 0,
       apkName: apkName,
-      apkUrl: (apk['browser_download_url'] ?? '').toString(),
-      releaseUrl: (json['html_url'] ?? '').toString(),
-      releaseNotes: (json['body'] ?? '').toString().trim(),
-      apkSize: apk['size'] as int?,
+      apkUrl: _asString(apk['browser_download_url']),
+      releaseUrl: _asString(json['html_url']),
+      releaseNotes: _asString(json['body']).trim(),
+      apkSize: _asInt(apk['size']),
     );
   }
 
@@ -87,6 +86,16 @@ class AppUpdateService {
     if (existing > 0) request.headers['Range'] = 'bytes=$existing-';
 
     final response = await _client.send(request);
+    if (response.statusCode == 416) {
+      final tempLength = await tempFile.exists() ? await tempFile.length() : 0;
+      if (update.apkSize != null && update.apkSize! > 0 && tempLength == update.apkSize) {
+        if (await file.exists()) await file.delete();
+        await tempFile.rename(file.path);
+        return file;
+      }
+      if (await tempFile.exists()) await tempFile.delete();
+      throw Exception('下载更新失败: 断点续传文件不完整');
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception('下载更新失败: HTTP ${response.statusCode}');
     }
@@ -116,6 +125,12 @@ class AppUpdateService {
       await sink.close();
     }
 
+    final finalLength = await tempFile.length();
+    if (update.apkSize != null && update.apkSize! > 0 && finalLength != update.apkSize) {
+      await tempFile.delete();
+      throw Exception('下载更新失败: 文件大小不一致');
+    }
+
     if (await file.exists()) await file.delete();
     await tempFile.rename(file.path);
     return file;
@@ -129,6 +144,26 @@ class AppUpdateService {
     if (result.type != ResultType.done) {
       throw Exception('无法打开安装器: ${result.message}');
     }
+  }
+
+  Map<String, dynamic> _asMap(Object? value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return value.map((key, value) => MapEntry(key.toString(), value));
+    return <String, dynamic>{};
+  }
+
+  List<dynamic> _asList(Object? value) {
+    if (value is List) return value;
+    return const <dynamic>[];
+  }
+
+  String _asString(Object? value) => value?.toString() ?? '';
+
+  int? _asInt(Object? value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value.trim());
+    return null;
   }
 
   String? _versionFromApkName(String name) {

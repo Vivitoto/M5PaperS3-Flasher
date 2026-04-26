@@ -113,15 +113,21 @@ class DownloadManager {
 
     final response = await _client.send(request);
     if (response.statusCode == 416) {
-      await tempFile.rename(file.path);
-      final verified = await verify(file, firmware.hash);
-      yield DownloadProgress(
-        receivedBytes: await file.length(),
-        totalBytes: await file.length(),
-        filePath: file.path,
-        verified: verified,
-      );
-      return;
+      final tempLength = await tempFile.exists() ? await tempFile.length() : 0;
+      if (expectedSize != null && expectedSize > 0 && tempLength == expectedSize) {
+        if (await file.exists()) await file.delete();
+        await tempFile.rename(file.path);
+        final verified = await verify(file, firmware.hash);
+        yield DownloadProgress(
+          receivedBytes: await file.length(),
+          totalBytes: expectedSize,
+          filePath: file.path,
+          verified: verified,
+        );
+        return;
+      }
+      if (await tempFile.exists()) await tempFile.delete();
+      throw Exception('Download resume failed: server rejected range and partial file is incomplete');
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception('Download failed: HTTP ${response.statusCode}');
@@ -147,6 +153,12 @@ class DownloadManager {
     } finally {
       await sink.flush();
       await sink.close();
+    }
+
+    final finalLength = await tempFile.length();
+    if (expectedSize != null && expectedSize > 0 && finalLength != expectedSize) {
+      await tempFile.delete();
+      throw Exception('Download size mismatch: expected $expectedSize bytes, got $finalLength bytes');
     }
 
     if (await file.exists()) await file.delete();

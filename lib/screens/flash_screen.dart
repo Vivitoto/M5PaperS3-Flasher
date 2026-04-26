@@ -59,6 +59,16 @@ class _FlashScreenState extends State<FlashScreen> {
 
   String get _burnModeLabel => _burnMode == 'clean' ? '彻底烧录' : '快速烧录';
 
+  String _baudRateLabel(int rate) {
+    return switch (rate) {
+      115200 => '115200（稳定）',
+      230400 => '230400（均衡）',
+      460800 => '460800（快速）',
+      921600 => '921600（高速）',
+      _ => '$rate',
+    };
+  }
+
   void _addLog(String message) {
     final now = DateTime.now();
     final time = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
@@ -189,7 +199,7 @@ class _FlashScreenState extends State<FlashScreen> {
     try {
       // 先用 Flutter USB 层打开一次设备，触发/确认 Android USB 授权；
       // 真正烧录交给 Android 内置 Python esptool，避免 Dart 手写 ROM 协议不稳定。
-      await _flasher.connect(device, baudRate: 115200);
+      await _flasher.connect(device, baudRate: _baudRate);
       await _flasher.close();
       _addLog('USB 授权已确认，切换到官方 esptool 烧录引擎');
 
@@ -209,7 +219,7 @@ class _FlashScreenState extends State<FlashScreen> {
           port: device.id,
           firmware: File(path),
           flashOffset: widget.firmware.flashOffset,
-          baudRate: 115200,
+          baudRate: _baudRate,
         );
         if (!mounted) return;
         if (!result.success) {
@@ -308,7 +318,7 @@ class _FlashScreenState extends State<FlashScreen> {
                             onChanged: _busy ? null : (_) => setState(() => _selectedDevice = device),
                           ),
                         )),
-                  Text('烧录速度: 115200（稳定模式）'),
+                  Text('烧录速度: ${_baudRateLabel(_baudRate)}'),
                 ],
               ),
             ),

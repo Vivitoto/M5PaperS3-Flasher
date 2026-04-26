@@ -35,7 +35,7 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun runEsptool(call: MethodCall, result: MethodChannel.Result) {
-        val args = call.argument<List<String>>("args")
+        val args = call.argument<List<Any?>>("args")?.map { it.toString() }
         if (args == null || args.isEmpty()) {
             result.error("bad_args", "Missing esptool arguments", null)
             return

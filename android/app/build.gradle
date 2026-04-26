@@ -36,6 +36,7 @@ android {
         python {
             version "3.11"
             pip {
+                install "bitstring==3.1.9"
                 install "esptool==4.8.1"
                 install "pyserial==3.5"
             }

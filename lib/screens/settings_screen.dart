@@ -170,7 +170,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _BurnModeCard(
                 selected: _burnMode == 'clean',
                 title: '彻底烧录',
-                description: '先清空设备闪存，再写入完整固件。适合换固件、设备异常或残留数据导致问题。',
+                description: '写入完整镜像并覆盖整颗闪存。适合换固件、设备异常或残留数据导致问题。',
                 onTap: () => setState(() => _burnMode = 'clean'),
               ),
             ],

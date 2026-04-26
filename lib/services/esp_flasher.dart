@@ -151,9 +151,8 @@ class EspFlasher {
         writtenBytes: 0,
         totalBytes: bytes.length,
         speedBytesPerSecond: 0,
-        stage: '正在清空设备闪存',
+        stage: flashOffset == 0 ? '完整镜像将覆盖整颗闪存' : '即将擦除并写入固件区域',
       );
-      await eraseFlash();
     }
 
     yield FlashProgress(

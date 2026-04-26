@@ -81,6 +81,18 @@ jobs:
           BUILD_TOOLS=$(ls -d $ANDROID_SDK_ROOT/build-tools/* | sort -V | tail -1)
           $BUILD_TOOLS/apksigner verify -v output/vink-flasher-v*.apk
 
+      - name: Remove old APK assets from latest release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view latest >/dev/null 2>&1; then
+            gh release view latest --json assets --jq '.assets[].name | select(endswith(".apk"))' | while read -r asset; do
+              if [ -n "$asset" ]; then
+                gh release delete-asset latest "$asset" --yes
+              fi
+            done
+          fi
+
       - name: Release APK to GitHub
         uses: softprops/action-gh-release@v2
         with:
@@ -92,6 +104,7 @@ jobs:
             - USB 串口一键烧录
             - 当前支持 Vink-PaperS3，后续可扩展更多设备
           files: output/vink-flasher-v*.apk
+          overwrite_files: true
           draft: false
           prerelease: false
         env:
@@ -104,6 +117,7 @@ jobs:
           name: Vink Flasher APK History
           body_path: apk-history/README.md
           files: output/vink-flasher-v*.apk
+          overwrite_files: true
           draft: false
           prerelease: false
         env:

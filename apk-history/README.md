@@ -9,6 +9,21 @@ APK 二进制文件不直接放在源码树里，避免 Git 仓库被大文件�
 
 ## 版本记录
 
+### v0.3.1+22 / `vink-flasher-v0_3_1.apk`
+
+发布时间：2026-04-26
+
+归档位置：
+
+- Latest: <https://github.com/Vivitoto/Vink-Flasher/releases/download/latest/vink-flasher-v0_3_1.apk>
+- History: <https://github.com/Vivitoto/Vink-Flasher/releases/download/apk-history/vink-flasher-v0_3_1.apk>
+
+更新内容：
+
+- 修复 Android 端 Chaquopy Python 无法用 `from com... import ...` 加载 Java 包导致的 `ModuleNotFoundError: No module named 'com'`。
+- 改用 Chaquopy 官方 `java.jclass(...)` 方式加载 USB Serial Java 类。
+- 显式加入 `usb-serial-for-android` 依赖和 JitPack 仓库，确保运行时可找到 `com.hoho.android.usbserial.driver.*`。
+
 ### v0.3.0+21 / `vink-flasher-v0_3_0.apk`
 
 发布时间：2026-04-26

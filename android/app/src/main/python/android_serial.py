@@ -1,10 +1,23 @@
 import time
 
-from android.hardware.usb import UsbManager
-from com.hoho.android.usbserial.driver import UsbSerialPort, UsbSerialProber
-from java.lang import UnsupportedOperationException
+from java import jclass
 from serial.serialutil import PortNotOpenError, SerialBase, SerialException
 from serial.tools import list_ports_common
+
+
+UsbSerialPort = None
+UsbSerialProber = None
+UnsupportedOperationException = None
+
+
+def _load_java_classes():
+    global UsbSerialPort, UsbSerialProber, UnsupportedOperationException
+    if UsbSerialPort is None:
+        UsbSerialPort = jclass("com.hoho.android.usbserial.driver.UsbSerialPort")
+    if UsbSerialProber is None:
+        UsbSerialProber = jclass("com.hoho.android.usbserial.driver.UsbSerialProber")
+    if UnsupportedOperationException is None:
+        UnsupportedOperationException = jclass("java.lang.UnsupportedOperationException")
 
 
 _android_context = None
@@ -15,6 +28,7 @@ _ESPRESSIF_USB_SERIAL_JTAG_PID = 0x1001
 def install_android_pyserial(context):
     global _android_context
     _android_context = context
+    _load_java_classes()
 
     import serial
     from serial.tools import list_ports
@@ -111,6 +125,7 @@ class AndroidSerial(SerialBase):
         if self.is_open:
             raise SerialException("Port is already open.")
 
+        _load_java_classes()
         context = _get_android_context()
         usb_manager = context.getSystemService(context.USB_SERVICE)
         drivers = _to_python_list(
@@ -129,7 +144,19 @@ class AndroidSerial(SerialBase):
             if preferred_driver is None and _is_preferred_usb_device(candidate_device):
                 preferred_driver = candidate
         if self.driver is None:
-            self.driver = preferred_driver or drivers[0]
+            available_ports = ", ".join(
+                str(candidate.getDevice().getDeviceName()) for candidate in drivers
+            )
+            raise SerialException(
+                "Selected USB device was not found: %s. Available devices: %s"
+                % (self._port, available_ports or "none")
+            )
+
+        if not usb_manager.hasPermission(self.driver.getDevice()):
+            raise SerialException(
+                "USB permission is not granted for device %s. Please reconnect the device and allow Vink Flasher access."
+                % self.driver.getDevice().getDeviceName()
+            )
 
         self.connection = usb_manager.openDevice(self.driver.getDevice())
         if self.connection is None:
@@ -252,7 +279,7 @@ class AndroidSerial(SerialBase):
 
     @property
     def in_waiting(self):
-        return -1
+        return 0
 
     @property
     def cts(self):

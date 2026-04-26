@@ -1,7 +1,7 @@
 name: vink_flasher
 description: Vink series ESP32 firmware flasher for Android.
 publish_to: 'none'
-version: 0.2.4+11
+version: 0.2.7+14
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -16,6 +16,8 @@ dependencies:
   url_launcher: ^6.1.0
   crypto: ^3.0.0
   usb_serial: ^0.5.2
+  package_info_plus: ^8.0.2
+  open_filex: ^4.5.0
 
 dev_dependencies:
   flutter_test:

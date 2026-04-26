@@ -117,9 +117,9 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('固件列表'),
+        title: const Text('固件'),
         actions: [
-          IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh)),
+          IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh_rounded)),
         ],
       ),
       body: FutureBuilder<List<Firmware>>(
@@ -136,12 +136,14 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
             onRefresh: _refresh,
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
               children: [
                 _Header(count: firmwares.length),
+                const SizedBox(height: 16),
                 if (firmwares.isEmpty)
                   const Padding(
                     padding: EdgeInsets.all(24),
-                    child: Center(child: Text('暂无可用自制固件，请稍后刷新')),
+                    child: Center(child: Text('暂无可用 Vink 固件，请稍后刷新')),
                   )
                 else
                   FirmwareCard(
@@ -174,30 +176,70 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFF151516),
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(color: const Color(0xFF2B2B2E)),
+      ),
       child: Row(
         children: [
-          Image.asset('assets/images/vink_flasher_logo.png', width: 72, height: 72),
-          const SizedBox(width: 14),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(22),
+            child: Image.asset('assets/images/vink_flasher_logo.png', width: 72, height: 72),
+          ),
+          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'Vink Flasher',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.6,
+                  ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 Text(
-                  'Vink 系列烧录器 · 当前支持 Vink-PaperS3 · ${count <= 1 ? 0 : count - 1} 个历史版本',
-                  style: const TextStyle(color: Colors.white70),
+                  'Vink 系列烧录器',
+                  style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white70),
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _Pill(text: 'PaperS3'),
+                    _Pill(text: '${count <= 1 ? 0 : count - 1} 个历史版本'),
+                  ],
                 ),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _Pill extends StatelessWidget {
+  const _Pill({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xFF222224),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFF333336)),
+      ),
+      child: Text(text, style: const TextStyle(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.w600)),
     );
   }
 }

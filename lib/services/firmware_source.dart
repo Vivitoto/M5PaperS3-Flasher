@@ -5,14 +5,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/firmware.dart';
 
-/// Vivitoto 自制固件源：只展示自己的 M5PaperS3-Firmware Release。
-class VivitotoSource {
+/// Vink 官方固件源。当前收录 Vink-PaperS3，后续可继续扩展其他设备。
+class VinkSource {
   static const String _releasesUrl =
       'https://api.github.com/repos/Vivitoto/M5PaperS3-Firmware/releases';
 
   final http.Client _client;
 
-  VivitotoSource({http.Client? client}) : _client = client ?? http.Client();
+  VinkSource({http.Client? client}) : _client = client ?? http.Client();
 
   Future<List<Firmware>> fetchFirmwares() async {
     final prefs = await SharedPreferences.getInstance();
@@ -69,7 +69,7 @@ class VivitotoSource {
         downloadUrl: binAsset['browser_download_url'] as String,
         sizeBytes: binAsset['size'] as int?,
         releaseUrl: htmlUrl,
-        source: FirmwareSource.vivitoto,
+        source: FirmwareSource.vink,
         flashOffset: isFullImage ? 0x0 : 0x10000,
       ));
     }
@@ -87,15 +87,15 @@ class VivitotoSource {
   }
 }
 
-/// 固件仓库：只保留自制固件源。
+/// 固件仓库：Vink 系列固件统一入口。
 class FirmwareRepository {
-  FirmwareRepository({VivitotoSource? vivitotoSource})
-      : _vivitotoSource = vivitotoSource ?? VivitotoSource();
+  FirmwareRepository({VinkSource? vinkSource})
+      : _vinkSource = vinkSource ?? VinkSource();
 
-  final VivitotoSource _vivitotoSource;
+  final VinkSource _vinkSource;
 
   Future<List<Firmware>> fetchAllFirmwares() async {
-    final results = await _vivitotoSource.fetchFirmwares();
+    final results = await _vinkSource.fetchFirmwares();
     results.sort((a, b) => b.version.compareTo(a.version));
     return results;
   }

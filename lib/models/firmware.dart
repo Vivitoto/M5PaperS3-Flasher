@@ -1,4 +1,4 @@
-enum FirmwareSource { vivitoto, m5stackOfficial, m5stackCommunity, edcBook, custom }
+enum FirmwareSource { vink, m5stackOfficial, m5stackCommunity, edcBook, custom }
 
 enum HashType { md5, sha256 }
 
@@ -71,8 +71,8 @@ class Firmware {
 
   String get sourceLabel {
     switch (source) {
-      case FirmwareSource.vivitoto:
-        return '自制固件';
+      case FirmwareSource.vink:
+        return 'Vink 官方';
       case FirmwareSource.m5stackOfficial:
         return 'M5Stack 官方';
       case FirmwareSource.m5stackCommunity:

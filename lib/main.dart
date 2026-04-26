@@ -3,11 +3,11 @@ import 'package:flutter/material.dart';
 import 'screens/home_screen.dart';
 
 void main() {
-  runApp(const M5PaperS3FlasherApp());
+  runApp(const VinkFlasherApp());
 }
 
-class M5PaperS3FlasherApp extends StatelessWidget {
-  const M5PaperS3FlasherApp({super.key});
+class VinkFlasherApp extends StatelessWidget {
+  const VinkFlasherApp({super.key});
 
   static const background = Color(0xFF1A1A2E);
   static const surface = Color(0xFF22223A);
@@ -16,7 +16,7 @@ class M5PaperS3FlasherApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Ink Flasher',
+      title: 'Vink Flasher',
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.dark,
       darkTheme: ThemeData(

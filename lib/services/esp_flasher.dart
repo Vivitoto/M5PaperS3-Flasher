@@ -27,7 +27,7 @@ class EspFlasher {
   static const int flashDataCommand = 0x03;
   static const int flashEndCommand = 0x04;
   static const int blockSize = 0x400;
-  // Ink Flasher 统一烧录完整镜像：bootloader + partition + app + resources。
+  // Vink Flasher 优先烧录完整镜像：bootloader + partition + app + resources。
   // 完整镜像必须从 0x0 开始写入。
   static const int defaultFlashOffset = 0x0;
 

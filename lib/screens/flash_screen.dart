@@ -180,7 +180,7 @@ class _FlashScreenState extends State<FlashScreen> {
           ),
           const SizedBox(height: 8),
           const Text(
-            '提示: 通过 USB-C OTG 连接 M5PaperS3，点击开始刷写后自动进入下载模式。默认写入完整镜像，包含分区表、固件和资源。',
+            '提示: 通过 USB-C OTG 连接目标设备，点击开始刷写后自动进入下载模式。Vink 固件默认写入完整镜像，包含分区表、固件和资源。',
             style: TextStyle(color: Colors.white54),
           ),
         ],

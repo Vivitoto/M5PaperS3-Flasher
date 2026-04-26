@@ -131,19 +131,19 @@ class _Header extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
       child: Row(
         children: [
-          Image.asset('assets/images/ink_flasher_logo.png', width: 72, height: 72),
+          Image.asset('assets/images/vink_flasher_logo.png', width: 72, height: 72),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Vink-PaperS3',
+                  'Vink Flasher',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'M5Stack PaperS3 自制固件 · ${count <= 1 ? 0 : count - 1} 个历史版本',
+                  'Vink 系列烧录器 · 当前支持 Vink-PaperS3 · ${count <= 1 ? 0 : count - 1} 个历史版本',
                   style: const TextStyle(color: Colors.white70),
                 ),
               ],

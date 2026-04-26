@@ -4,8 +4,8 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
-def appVersionName = "0.1.5"
-def appVersionCode = 6
+def appVersionName = "0.2.0"
+def appVersionCode = 7
 
 android {
     namespace "ink.flasher"
@@ -21,7 +21,7 @@ android {
     }
 
     defaultConfig {
-        // 固定 applicationId，后续版本覆盖安装；App 显示名仍是 Ink Flasher。
+        // 固定 applicationId，后续版本覆盖安装；App 显示名为 Vink Flasher。
         applicationId "ink.flasher"
         minSdk 24
         targetSdk 35

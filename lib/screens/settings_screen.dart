@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../services/app_update_service.dart';
 
@@ -76,9 +75,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!mounted) return;
       setState(() {
         _updateInfo = info;
-        _updateStatus = info.hasUpdate
-            ? '发现新版本 ${info.latestVersion}'
-            : '当前已是最新版本 ${info.currentVersion}';
+        _updateStatus = info.hasUpdate ? '发现新版本 ${info.latestVersion}' : '当前已是最新版本 ${info.currentVersion}';
       });
     } catch (error) {
       if (!mounted) return;
@@ -120,11 +117,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _openM5StackFlashMode() async {
-    final uri = Uri.parse('https://api.m5stack.com/flash_mode/');
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-  }
-
   String _sizeLabel(int bytes) {
     if (bytes >= 1024 * 1024) return '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
     if (bytes >= 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
@@ -141,9 +133,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     };
   }
 
-  String get _burnModeSummary => _burnMode == 'clean'
-      ? '先清空设备闪存，再写入完整固件；适合异常修复或换固件。'
-      : '直接写入完整固件，不额外清空整颗闪存；适合日常升级。';
+  String get _burnModeSummary => _burnMode == 'clean' ? '彻底烧录：先清空闪存再写入' : '快速烧录：直接写入完整固件';
 
   @override
   Widget build(BuildContext context) {
@@ -152,66 +142,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('设置')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
+        padding: const EdgeInsets.fromLTRB(14, 0, 14, 22),
         children: [
           _Section(
-            title: '应用更新',
-            subtitle: updateInfo == null
-                ? '检查 Vink Flasher 新版本'
-                : '当前 ${updateInfo.currentVersion} · 最新 ${updateInfo.latestVersion}',
+            title: '烧录设置',
+            subtitle: _burnModeSummary,
             children: [
-              if (_updateStatus != null) ...[
-                Text(_updateStatus!, style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white70)),
-                const SizedBox(height: 12),
-              ],
-              if (_downloadingUpdate) ...[
-                LinearProgressIndicator(value: _updateProgress),
-                const SizedBox(height: 12),
-              ],
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _checkingUpdate || _downloadingUpdate ? null : _checkUpdate,
-                      icon: _checkingUpdate
-                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Icon(Icons.system_update_alt_rounded),
-                      label: const Text('检查更新'),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: updateInfo?.hasUpdate == true && !_checkingUpdate && !_downloadingUpdate
-                          ? _downloadAndInstallUpdate
-                          : null,
-                      icon: const Icon(Icons.download_rounded),
-                      label: const Text('下载并安装'),
-                    ),
-                  ),
-                ],
+              DropdownButtonFormField<int>(
+                value: _baudRate,
+                decoration: const InputDecoration(labelText: '烧录速度'),
+                items: const [115200, 230400, 460800, 921600]
+                    .map((rate) => DropdownMenuItem(value: rate, child: Text(_baudRateLabel(rate))))
+                    .toList(),
+                onChanged: (value) => setState(() => _baudRate = value ?? 115200),
               ),
-              const SizedBox(height: 10),
-              Text(
-                '下载完成后会打开系统安装器。若系统提示禁止安装未知来源应用，请允许 Vink Flasher 安装更新。',
-                style: theme.textTheme.bodySmall?.copyWith(color: Colors.white54),
+              const SizedBox(height: 14),
+              Text('烧录模式', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 8),
+              _BurnModeCard(
+                selected: _burnMode == 'fast',
+                title: '快速烧录',
+                badge: '推荐',
+                description: '不额外清空整颗闪存，直接写入完整固件。适合日常升级、重复烧录 Vink 固件。',
+                onTap: () => setState(() => _burnMode = 'fast'),
+              ),
+              const SizedBox(height: 8),
+              _BurnModeCard(
+                selected: _burnMode == 'clean',
+                title: '彻底烧录',
+                description: '先清空设备闪存，再写入完整固件。适合换固件、设备异常或残留数据导致问题。',
+                onTap: () => setState(() => _burnMode = 'clean'),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           _Section(
             title: '固件源',
-            subtitle: '仓库访问和自定义固件地址',
+            subtitle: '自定义下载地址和 GitHub 访问',
             children: [
-              TextField(
-                controller: _githubTokenController,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'GitHub 令牌（可选）',
-                  helperText: '用于私有仓库或更高 API 限额',
-                ),
-              ),
-              const SizedBox(height: 12),
               TextField(
                 controller: _customUrlController,
                 decoration: const InputDecoration(
@@ -219,63 +187,65 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   hintText: 'https://example.com/firmware.bin',
                 ),
               ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _githubTokenController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'GitHub 令牌（可选）',
+                  helperText: '私有仓库或 API 限额不足时使用',
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           _Section(
-            title: '烧录设置',
-            subtitle: '控制烧录速度，以及烧录前是否清空设备闪存',
+            title: '应用更新',
+            subtitle: updateInfo == null ? '检查 Vink Flasher 新版本' : '当前 ${updateInfo.currentVersion} · 最新 ${updateInfo.latestVersion}',
             children: [
-              DropdownButtonFormField<int>(
-                value: _baudRate,
-                decoration: const InputDecoration(
-                  labelText: '烧录速度',
-                  helperText: '也叫波特率。数值越高传输越快；如果烧录失败或中断，调低会更稳。',
-                ),
-                items: const [115200, 230400, 460800, 921600]
-                    .map((rate) => DropdownMenuItem(value: rate, child: Text(_baudRateLabel(rate))))
-                    .toList(),
-                onChanged: (value) => setState(() => _baudRate = value ?? 115200),
-              ),
-              const SizedBox(height: 18),
-              Text(
-                '烧录模式',
-                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              if (_updateStatus != null) ...[
+                Text(_updateStatus!, style: theme.textTheme.bodySmall?.copyWith(color: Colors.white70)),
+                const SizedBox(height: 10),
+              ],
+              if (_downloadingUpdate) ...[
+                LinearProgressIndicator(value: _updateProgress),
+                const SizedBox(height: 10),
+              ],
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _checkingUpdate || _downloadingUpdate ? null : _checkUpdate,
+                      icon: _checkingUpdate
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.system_update_alt_rounded),
+                      label: const Text('检查更新'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: updateInfo?.hasUpdate == true && !_checkingUpdate && !_downloadingUpdate
+                          ? _downloadAndInstallUpdate
+                          : null,
+                      icon: const Icon(Icons.download_rounded),
+                      label: const Text('下载安装'),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
-              _BurnModeCard(
-                selected: _burnMode == 'fast',
-                title: '快速烧录',
-                badge: '推荐',
-                description: '不额外清空整颗闪存，直接写入完整固件。速度更快，适合日常升级、重复烧录 Vink 固件。',
-                onTap: () => setState(() => _burnMode = 'fast'),
-              ),
-              const SizedBox(height: 10),
-              _BurnModeCard(
-                selected: _burnMode == 'clean',
-                title: '彻底烧录',
-                badge: '修复用',
-                description: '先清空设备闪存，再写入完整固件。更干净但耗时更长，适合换固件、设备异常或残留数据导致问题时使用。',
-                onTap: () => setState(() => _burnMode = 'clean'),
-              ),
-              const SizedBox(height: 12),
               Text(
-                '当前选择：$_burnModeSummary',
-                style: theme.textTheme.bodySmall?.copyWith(color: Colors.white54, height: 1.35),
+                '下载完成后会打开系统安装器；如被拦截，请允许 Vink Flasher 安装未知来源应用。',
+                style: theme.textTheme.bodySmall?.copyWith(color: Colors.white45, height: 1.35),
               ),
             ],
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 14),
           FilledButton.icon(
             onPressed: _save,
             icon: const Icon(Icons.check_rounded),
             label: const Text('保存设置'),
-          ),
-          const SizedBox(height: 8),
-          TextButton.icon(
-            onPressed: _openM5StackFlashMode,
-            icon: const Icon(Icons.open_in_new_rounded),
-            label: const Text('打开 M5Stack 官方刷机目录'),
           ),
         ],
       ),
@@ -299,14 +269,14 @@ class _Section extends StatelessWidget {
     final theme = Theme.of(context);
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
-            const SizedBox(height: 4),
-            Text(subtitle, style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white54)),
-            const SizedBox(height: 16),
+            Text(title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -0.2)),
+            const SizedBox(height: 3),
+            Text(subtitle, style: theme.textTheme.bodySmall?.copyWith(color: Colors.white45, height: 1.25)),
+            const SizedBox(height: 12),
             ...children,
           ],
         ),
@@ -319,14 +289,14 @@ class _BurnModeCard extends StatelessWidget {
   const _BurnModeCard({
     required this.selected,
     required this.title,
-    required this.badge,
+    this.badge,
     required this.description,
     required this.onTap,
   });
 
   final bool selected;
   final String title;
-  final String badge;
+  final String? badge;
   final String description;
   final VoidCallback onTap;
 
@@ -338,26 +308,27 @@ class _BurnModeCard extends StatelessWidget {
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(16),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.all(14),
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: backgroundColor,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: borderColor, width: selected ? 1.3 : 1),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: borderColor, width: selected ? 1.2 : 1),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.only(top: 2),
+              padding: const EdgeInsets.only(top: 1),
               child: Icon(
                 selected ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+                size: 20,
                 color: selected ? Colors.white : Colors.white38,
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -365,32 +336,27 @@ class _BurnModeCard extends StatelessWidget {
                   Row(
                     children: [
                       Expanded(
-                        child: Text(
-                          title,
-                          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-                        ),
+                        child: Text(title, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: selected ? Colors.white : Colors.white10,
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          badge,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: selected ? Colors.black : Colors.white70,
-                            fontWeight: FontWeight.w800,
+                      if (badge != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: selected ? Colors.white : Colors.white10,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            badge!,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: selected ? Colors.black : Colors.white60,
+                              fontWeight: FontWeight.w800,
+                            ),
                           ),
                         ),
-                      ),
                     ],
                   ),
-                  const SizedBox(height: 7),
-                  Text(
-                    description,
-                    style: theme.textTheme.bodySmall?.copyWith(color: Colors.white60, height: 1.4),
-                  ),
+                  const SizedBox(height: 5),
+                  Text(description, style: theme.textTheme.bodySmall?.copyWith(color: Colors.white55, height: 1.35)),
                 ],
               ),
             ),

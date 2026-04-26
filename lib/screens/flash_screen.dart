@@ -225,7 +225,7 @@ class _FlashScreenState extends State<FlashScreen> {
           ),
           const SizedBox(height: 8),
           const Text(
-            '提示: 通过 USB-C OTG 连接目标设备，点击开始刷写后会弹出系统 USB 授权窗口，请选择允许。Vink 默认写入完整镜像，包含分区表、固件和资源。彻底烧录会先清空设备闪存，耗时更长。'
+            '提示: 通过 USB-C OTG 连接目标设备，点击开始刷写后会弹出系统 USB 授权窗口，请选择允许。Vink 默认写入完整镜像，包含分区表、固件和资源。彻底烧录会先清空设备闪存，耗时更长。',
             style: TextStyle(color: Colors.white54),
           ),
         ],

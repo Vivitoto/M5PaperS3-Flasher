@@ -247,11 +247,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 selected: _burnMode == 'fast',
                 title: '快速烧录',
                 badge: '推荐',
-                bullets: const [
-                  '直接写入完整固件，不额外清空整颗闪存。',
-                  '速度更快，适合正常升级、重复烧录同一个 Vink 固件。',
-                  '大多数情况下选这个就够了。',
-                ],
+                description: '不额外清空整颗闪存，直接写入完整固件。速度更快，适合日常升级、重复烧录 Vink 固件。',
                 onTap: () => setState(() => _burnMode = 'fast'),
               ),
               const SizedBox(height: 10),
@@ -259,11 +255,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 selected: _burnMode == 'clean',
                 title: '彻底烧录',
                 badge: '修复用',
-                bullets: const [
-                  '先清空设备闪存，再写入完整固件。',
-                  '更干净，但耗时更长。',
-                  '适合从其他固件切换、设备异常、资源/配置残留导致问题时使用。',
-                ],
+                description: '先清空设备闪存，再写入完整固件。更干净但耗时更长，适合换固件、设备异常或残留数据导致问题时使用。',
                 onTap: () => setState(() => _burnMode = 'clean'),
               ),
               const SizedBox(height: 12),
@@ -328,14 +320,14 @@ class _BurnModeCard extends StatelessWidget {
     required this.selected,
     required this.title,
     required this.badge,
-    required this.bullets,
+    required this.description,
     required this.onTap,
   });
 
   final bool selected;
   final String title;
   final String badge;
-  final List<String> bullets;
+  final String description;
   final VoidCallback onTap;
 
   @override
@@ -394,38 +386,16 @@ class _BurnModeCard extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  ...bullets.map((text) => _Bullet(text: text)),
+                  const SizedBox(height: 7),
+                  Text(
+                    description,
+                    style: theme.textTheme.bodySmall?.copyWith(color: Colors.white60, height: 1.4),
+                  ),
                 ],
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _Bullet extends StatelessWidget {
-  const _Bullet({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 5),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('• ', style: TextStyle(color: Colors.white54, height: 1.35)),
-          Expanded(
-            child: Text(
-              text,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.white60, height: 1.35),
-            ),
-          ),
-        ],
       ),
     );
   }

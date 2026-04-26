@@ -1,80 +1,87 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/firmware.dart';
 
-/// Vink 官方固件源。当前收录 Vink-PaperS3，后续可继续扩展其他设备。
+/// Vink 官方固件源。
+///
+/// GitHub Release 是仓库级的，无法放进设备子目录；因此每个设备目录维护
+/// 自己的 releases.json，App 以设备清单作为接口入口。
 class VinkSource {
-  static const String _releasesUrl =
-      'https://api.github.com/repos/Vivitoto/Vink-Firmware/releases';
+  static const List<String> _manifestUrls = [
+    'https://raw.githubusercontent.com/Vivitoto/Vink-Firmware/main/PaperS3/releases.json',
+  ];
 
   final http.Client _client;
 
   VinkSource({http.Client? client}) : _client = client ?? http.Client();
 
   Future<List<Firmware>> fetchFirmwares() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('githubToken')?.trim();
-
-    final response = await _client.get(
-      Uri.parse(_releasesUrl),
-      headers: {
-        'Accept': 'application/vnd.github+json',
-        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-      },
-    );
-
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('GitHub API 请求失败: ${response.statusCode}');
-    }
-
-    final releases = jsonDecode(response.body) as List<dynamic>;
     final results = <Firmware>[];
 
-    for (final release in releases.cast<Map<String, dynamic>>()) {
-      final tagName = (release['tag_name'] ?? 'latest').toString();
-      final releaseName = (release['name'] ?? 'Vink-PaperS3').toString();
-      final body = (release['body'] ?? '').toString().trim();
-      final htmlUrl = release['html_url'] as String?;
-      final assets = (release['assets'] as List<dynamic>? ?? [])
+    for (final manifestUrl in _manifestUrls) {
+      final response = await _client.get(
+        Uri.parse(manifestUrl),
+        headers: {'Accept': 'application/json'},
+      );
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('Vink 固件清单请求失败: ${response.statusCode}');
+      }
+
+      final manifest = jsonDecode(response.body) as Map<String, dynamic>;
+      final device = (manifest['device'] ?? 'unknown').toString();
+      final firmwareName = (manifest['firmwareName'] ?? 'Vink-$device').toString();
+      final releases = (manifest['releases'] as List<dynamic>? ?? [])
           .cast<Map<String, dynamic>>();
 
-      final binAssets = assets
-          .where((a) => (a['name'] as String? ?? '').toLowerCase().endsWith('.bin'))
-          .toList();
-      if (binAssets.isEmpty) continue;
+      for (final release in releases) {
+        final version = (release['version'] ?? '').toString();
+        if (version.isEmpty) continue;
 
-      // 优先显示最完整镜像：bootloader + partition + app + SPIFFS。
-      // 旧 Release 如果还没有 full/factory/16mb 包，则暂时回退到第一个 bin，
-      // 但自制源仍只保留 Vivitoto 自己的固件。
-      final fullAssets = binAssets.where((a) {
-        final name = (a['name'] as String? ?? '').toLowerCase();
-        return name.contains('full') ||
-            name.contains('complete') ||
-            name.contains('factory') ||
-            name.contains('16mb');
-      }).toList();
-      final binAsset = fullAssets.isNotEmpty ? fullAssets.first : binAssets.first;
-      final assetName = (binAsset['name'] ?? '').toString();
-      final isFullImage = fullAssets.isNotEmpty;
+        final assets = (release['assets'] as Map<String, dynamic>? ?? {})
+            .cast<String, dynamic>();
+        final selectedAsset = _selectFlashAsset(assets);
+        if (selectedAsset == null) continue;
 
-      results.add(Firmware(
-        id: 'vivitoto-$tagName-${assetName.hashCode}',
-        name: 'Vink-PaperS3',
-        version: tagName,
-        description: _summary(body, releaseName),
-        changelog: body.isEmpty ? '暂无更新说明' : body,
-        downloadUrl: binAsset['browser_download_url'] as String,
-        sizeBytes: binAsset['size'] as int?,
-        releaseUrl: htmlUrl,
-        source: FirmwareSource.vink,
-        flashOffset: isFullImage ? 0x0 : 0x10000,
-      ));
+        final asset = selectedAsset.cast<String, dynamic>();
+        final assetName = (asset['name'] ?? '').toString();
+        final downloadUrl = (asset['url'] ?? '').toString();
+        if (downloadUrl.isEmpty) continue;
+
+        final changelog = (release['changelog'] ?? '').toString().trim();
+        final summary = (release['summary'] ?? '').toString().trim();
+        final releaseName = (release['name'] ?? firmwareName).toString();
+
+        results.add(Firmware(
+          id: 'vink-$device-$version-${assetName.hashCode}',
+          name: firmwareName,
+          version: version,
+          description: summary.isEmpty ? _summary(changelog, releaseName) : summary,
+          changelog: changelog.isEmpty ? '暂无更新说明' : changelog,
+          downloadUrl: downloadUrl,
+          sizeBytes: asset['size'] as int?,
+          releaseUrl: release['releaseUrl'] as String?,
+          source: FirmwareSource.vink,
+          flashOffset: asset['flashOffset'] as int? ?? 0,
+        ));
+      }
     }
 
     return results;
+  }
+
+  Map<String, dynamic>? _selectFlashAsset(Map<String, dynamic> assets) {
+    // App 默认烧录完整包。旧历史版本如果没有 full，只作为历史说明兼容回退。
+    final preferred = assets['full'] ?? assets['factory'] ?? assets['complete'] ?? assets['ota'];
+    if (preferred is Map<String, dynamic>) return preferred;
+    if (preferred is Map) return preferred.cast<String, dynamic>();
+    for (final value in assets.values) {
+      if (value is Map<String, dynamic>) return value;
+      if (value is Map) return value.cast<String, dynamic>();
+    }
+    return null;
   }
 
   String _summary(String body, String fallback) {

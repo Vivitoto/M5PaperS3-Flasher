@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/firmware.dart';
 import '../services/esp_flasher.dart';
+import '../services/esptool_service.dart';
 
 class FlashScreen extends StatefulWidget {
   const FlashScreen({super.key, required this.firmware});
@@ -63,8 +64,68 @@ class _FlashScreenState extends State<FlashScreen> {
     final time = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
     setState(() {
       _logs.add('[$time] $message');
-      if (_logs.length > 120) _logs.removeRange(0, _logs.length - 120);
+      if (_logs.length > 160) _logs.removeRange(0, _logs.length - 160);
     });
+  }
+
+  void _handleEsptoolLog(String raw) {
+    if (!mounted) return;
+    final lines = raw
+        .replaceAll('\r', '\n')
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+    for (final line in lines) {
+      _addLog(line.length > 300 ? '${line.substring(0, 300)}…' : line);
+      _updateProgressFromEsptoolLine(line);
+    }
+  }
+
+  void _updateProgressFromEsptoolLine(String line) {
+    final percentMatch = RegExp(r'\((\d+)\s*%\)').firstMatch(line);
+    if (percentMatch != null) {
+      final percent = int.tryParse(percentMatch.group(1) ?? '0') ?? 0;
+      setState(() {
+        _status = '正在写入固件 $percent%';
+        _progress = FlashProgress(
+          writtenBytes: percent,
+          totalBytes: 100,
+          speedBytesPerSecond: 0,
+          stage: '官方 esptool 正在写入固件',
+        );
+      });
+      return;
+    }
+
+    String? stage;
+    if (line.contains('Connecting')) {
+      stage = '正在连接 ESP32 下载模式';
+    } else if (line.contains('Chip is')) {
+      stage = '已识别芯片';
+    } else if (line.contains('Uploading stub') || line.contains('Running stub')) {
+      stage = '正在启动 esptool 写入助手';
+    } else if (line.contains('Erasing flash') || line.contains('Erase size')) {
+      stage = '正在擦除目标区域';
+    } else if (line.contains('Writing at')) {
+      stage = '正在写入固件';
+    } else if (line.contains('Hash of data verified')) {
+      stage = '写入校验通过';
+    } else if (line.contains('Hard resetting')) {
+      stage = '正在重启设备';
+    }
+
+    if (stage != null) {
+      setState(() {
+        _status = stage;
+        _progress = FlashProgress(
+          writtenBytes: _progress?.writtenBytes ?? 0,
+          totalBytes: 100,
+          speedBytesPerSecond: 0,
+          stage: stage!,
+        );
+      });
+    }
   }
 
   Future<void> _scanDevices() async {
@@ -126,37 +187,50 @@ class _FlashScreenState extends State<FlashScreen> {
     _addLog('打开 USB 串口: ${device.label}');
 
     try {
-      // ESP32-S3 ROM bootloader sync is most reliable at 115200.
-      // Higher-speed switching needs an explicit CHANGE_BAUD command after sync;
-      // until that is implemented, keep the actual bootloader connection stable.
+      // 先用 Flutter USB 层打开一次设备，触发/确认 Android USB 授权；
+      // 真正烧录交给 Android 内置 Python esptool，避免 Dart 手写 ROM 协议不稳定。
       await _flasher.connect(device, baudRate: 115200);
-      _addLog('USB 串口已打开，开始连接 ESP32 下载模式');
-      String? lastStage;
-      int lastPercent = -1;
-      await for (final progress in _flasher.flashFile(
-        File(path),
-        flashOffset: widget.firmware.flashOffset,
-        eraseBeforeWrite: _burnMode == 'clean',
-      )) {
+      await _flasher.close();
+      _addLog('USB 授权已确认，切换到官方 esptool 烧录引擎');
+
+      setState(() {
+        _status = '正在启动官方 esptool 烧录引擎';
+        _progress = FlashProgress(
+          writtenBytes: 0,
+          totalBytes: 100,
+          speedBytesPerSecond: 0,
+          stage: '启动 esptool',
+        );
+      });
+
+      final logSubscription = EsptoolService.instance.logs.listen(_handleEsptoolLog);
+      try {
+        final result = await EsptoolService.instance.flashFullImage(
+          port: device.id,
+          firmware: File(path),
+          flashOffset: widget.firmware.flashOffset,
+          baudRate: 115200,
+        );
         if (!mounted) return;
+        if (!result.success) {
+          throw Exception(result.output.isEmpty ? 'esptool 烧录失败' : result.output.split('\n').last);
+        }
         setState(() {
-          _progress = progress;
-          _status = progress.stage;
-          final percent = progress.percent.floor();
-          if (progress.stage != lastStage) {
-            lastStage = progress.stage;
-            _logs.add('[${DateTime.now().hour.toString().padLeft(2, '0')}:${DateTime.now().minute.toString().padLeft(2, '0')}:${DateTime.now().second.toString().padLeft(2, '0')}] ${progress.stage}');
-          } else if (percent >= 0 && percent != lastPercent && percent % 10 == 0) {
-            lastPercent = percent;
-            _logs.add('[${DateTime.now().hour.toString().padLeft(2, '0')}:${DateTime.now().minute.toString().padLeft(2, '0')}:${DateTime.now().second.toString().padLeft(2, '0')}] 写入进度 $percent%');
-          }
+          _status = '刷写完成，设备正在重启';
+          _progress = const FlashProgress(
+            writtenBytes: 100,
+            totalBytes: 100,
+            speedBytesPerSecond: 0,
+            stage: 'Done, rebooting / 完成并重启',
+          );
         });
+        _addLog('刷写完成，设备正在重启');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('刷写完成')),
+        );
+      } finally {
+        await logSubscription.cancel();
       }
-      if (!mounted) return;
-      _addLog('刷写完成，设备正在重启');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('刷写完成')),
-      );
     } on TimeoutException {
       if (!mounted) return;
       setState(() {

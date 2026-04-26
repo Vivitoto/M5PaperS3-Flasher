@@ -35,7 +35,7 @@ class VivitotoSource {
 
     for (final release in releases.cast<Map<String, dynamic>>()) {
       final tagName = (release['tag_name'] ?? 'latest').toString();
-      final releaseName = (release['name'] ?? 'M5PaperS3 Ebook').toString();
+      final releaseName = (release['name'] ?? 'Vink-PaperS3').toString();
       final body = (release['body'] ?? '').toString().trim();
       final htmlUrl = release['html_url'] as String?;
       final assets = (release['assets'] as List<dynamic>? ?? [])
@@ -62,7 +62,7 @@ class VivitotoSource {
 
       results.add(Firmware(
         id: 'vivitoto-$tagName-${assetName.hashCode}',
-        name: 'M5PaperS3 Ebook',
+        name: 'Vink-PaperS3',
         version: tagName,
         description: _summary(body, releaseName),
         changelog: body.isEmpty ? '暂无更新说明' : body,

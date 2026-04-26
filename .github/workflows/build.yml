@@ -35,12 +35,19 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Generate release signing key
+      - name: Restore release signing key
+        env:
+          INK_FLASHER_KEYSTORE_B64: ${{ secrets.INK_FLASHER_KEYSTORE_B64 }}
         run: |
           mkdir -p android/app/keystore
-          keytool -genkey -v -keystore android/app/keystore/release.keystore -storepass inkflasher -alias inkflasher -keypass inkflasher -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Ink Flasher,O=Ink,C=US"
+          test -n "$INK_FLASHER_KEYSTORE_B64"
+          echo "$INK_FLASHER_KEYSTORE_B64" | base64 -d > android/app/keystore/release.keystore
 
       - name: Build APK
+        env:
+          INK_FLASHER_STORE_PASSWORD: ${{ secrets.INK_FLASHER_STORE_PASSWORD }}
+          INK_FLASHER_KEY_ALIAS: ${{ secrets.INK_FLASHER_KEY_ALIAS }}
+          INK_FLASHER_KEY_PASSWORD: ${{ secrets.INK_FLASHER_KEY_PASSWORD }}
         run: flutter build apk --release
 
       - name: Rename APK
@@ -51,13 +58,17 @@ jobs:
           cp build/app/outputs/flutter-apk/app-release.apk "output/ink-flasher-v${VERSION_SUFFIX}.apk"
 
       - name: Sign APK with apksigner
+        env:
+          INK_FLASHER_STORE_PASSWORD: ${{ secrets.INK_FLASHER_STORE_PASSWORD }}
+          INK_FLASHER_KEY_ALIAS: ${{ secrets.INK_FLASHER_KEY_ALIAS }}
+          INK_FLASHER_KEY_PASSWORD: ${{ secrets.INK_FLASHER_KEY_PASSWORD }}
         run: |
           BUILD_TOOLS=$(ls -d $ANDROID_SDK_ROOT/build-tools/* | sort -V | tail -1)
           $BUILD_TOOLS/apksigner sign \
             --ks android/app/keystore/release.keystore \
-            --ks-pass pass:inkflasher \
-            --key-pass pass:inkflasher \
-            --ks-key-alias inkflasher \
+            --ks-pass pass:$INK_FLASHER_STORE_PASSWORD \
+            --key-pass pass:$INK_FLASHER_KEY_PASSWORD \
+            --ks-key-alias $INK_FLASHER_KEY_ALIAS \
             output/ink-flasher-v*.apk
 
       - name: Verify APK signature

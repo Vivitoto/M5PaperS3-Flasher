@@ -138,12 +138,12 @@ class _Header extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Ink Flasher',
+                  'Vink-PaperS3',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '自制固件源 · 一个入口 · $count 个历史版本',
+                  'M5Stack PaperS3 自制固件 · ${count <= 1 ? 0 : count - 1} 个历史版本',
                   style: const TextStyle(color: Colors.white70),
                 ),
               ],

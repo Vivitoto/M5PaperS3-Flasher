@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/firmware.dart';
 
-class FirmwareCard extends StatefulWidget {
+class FirmwareCard extends StatelessWidget {
   const FirmwareCard({
     super.key,
     required this.firmwares,
@@ -18,22 +18,14 @@ class FirmwareCard extends StatefulWidget {
   final bool Function(Firmware firmware) isDownloading;
   final double? Function(Firmware firmware) downloadProgress;
 
-  @override
-  State<FirmwareCard> createState() => _FirmwareCardState();
-}
-
-class _FirmwareCardState extends State<FirmwareCard> {
-  Firmware? _selectedHistory;
-
-  Firmware get latest => widget.firmwares.first;
-  List<Firmware> get history => widget.firmwares.length <= 1 ? const [] : widget.firmwares.skip(1).toList();
+  Firmware get latest => firmwares.first;
+  List<Firmware> get history => firmwares.length <= 1 ? const [] : firmwares.skip(1).toList();
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final selected = _selectedHistory;
-    final downloading = widget.isDownloading(latest);
-    final progress = widget.downloadProgress(latest);
+    final downloading = isDownloading(latest);
+    final progress = downloadProgress(latest);
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -60,15 +52,15 @@ class _FirmwareCardState extends State<FirmwareCard> {
             Text('最新版本: ${latest.version}'),
             Text('大小: ${latest.sizeLabel}'),
             Text('烧录: ${latest.flashOffset == 0 ? '完整镜像' : 'App分区'}'),
-            const SizedBox(height: 12),
-            Text('最新更新内容', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 6),
-            Text(
-              latest.changelog.trim().isEmpty ? latest.description : latest.changelog,
-              style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white70),
+            const SizedBox(height: 10),
+            _ChangelogTile(
+              title: '最新更新内容',
+              subtitle: latest.description,
+              changelog: latest.changelog,
+              initiallyExpanded: true,
             ),
             if (history.isNotEmpty) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               Theme(
                 data: theme.copyWith(dividerColor: Colors.transparent),
                 child: ExpansionTile(
@@ -77,24 +69,15 @@ class _FirmwareCardState extends State<FirmwareCard> {
                   title: Text('历史版本（${history.length}）'),
                   children: [
                     for (final item in history)
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(item.version),
-                        subtitle: Text(item.description, maxLines: 1, overflow: TextOverflow.ellipsis),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => setState(() => _selectedHistory = item),
+                      _ChangelogTile(
+                        title: item.version,
+                        subtitle: item.description,
+                        changelog: item.changelog,
+                        initiallyExpanded: false,
+                        dense: true,
                       ),
                   ],
                 ),
-              ),
-            ],
-            if (selected != null) ...[
-              const Divider(height: 24),
-              Text('历史版本 ${selected.version}', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-              const SizedBox(height: 6),
-              Text(
-                selected.changelog.trim().isEmpty ? selected.description : selected.changelog,
-                style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white70),
               ),
             ],
             const SizedBox(height: 16),
@@ -113,14 +96,14 @@ class _FirmwareCardState extends State<FirmwareCard> {
                   const Spacer(),
                 ] else ...[
                   FilledButton.icon(
-                    onPressed: () => widget.onDownload(latest),
+                    onPressed: () => onDownload(latest),
                     icon: const Icon(Icons.download),
                     label: const Text('下载最新版'),
                   ),
                   const SizedBox(width: 8),
                 ],
                 OutlinedButton.icon(
-                  onPressed: () => widget.onFlash(latest),
+                  onPressed: () => onFlash(latest),
                   icon: const Icon(Icons.flash_on),
                   label: const Text('刷写最新版'),
                 ),
@@ -128,6 +111,53 @@ class _FirmwareCardState extends State<FirmwareCard> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ChangelogTile extends StatelessWidget {
+  const _ChangelogTile({
+    required this.title,
+    required this.subtitle,
+    required this.changelog,
+    required this.initiallyExpanded,
+    this.dense = false,
+  });
+
+  final String title;
+  final String subtitle;
+  final String changelog;
+  final bool initiallyExpanded;
+  final bool dense;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final text = changelog.trim().isEmpty ? subtitle : changelog.trim();
+
+    return Theme(
+      data: theme.copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: EdgeInsets.only(left: dense ? 16 : 0, right: 0, bottom: 10),
+        initiallyExpanded: initiallyExpanded,
+        title: Text(
+          title,
+          style: dense ? theme.textTheme.titleSmall : theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        subtitle: dense && subtitle.trim().isNotEmpty
+            ? Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis)
+            : null,
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              text,
+              style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white70),
+            ),
+          ),
+        ],
       ),
     );
   }

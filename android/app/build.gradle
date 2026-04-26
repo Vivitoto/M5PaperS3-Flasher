@@ -4,8 +4,8 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
-def appVersionName = "0.1.4"
-def appVersionCode = 5
+def appVersionName = "0.1.5"
+def appVersionCode = 6
 
 android {
     namespace "ink.flasher"

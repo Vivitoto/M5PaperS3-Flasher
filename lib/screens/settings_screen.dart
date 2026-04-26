@@ -356,7 +356,7 @@ class _BurnModeCard extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 5),
-                  Text(description, style: theme.textTheme.bodySmall?.copyWith(color: Colors.white55, height: 1.35)),
+                  Text(description, style: theme.textTheme.bodySmall?.copyWith(color: Colors.white54, height: 1.35)),
                 ],
               ),
             ),

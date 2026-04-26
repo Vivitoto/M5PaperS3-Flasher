@@ -89,31 +89,29 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
           final firmwares = snapshot.data ?? const <Firmware>[];
           return RefreshIndicator(
             onRefresh: _refresh,
-            child: ListView.builder(
+            child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              itemCount: firmwares.length + 1,
-              itemBuilder: (context, index) {
-                if (index == 0) return _Header(count: firmwares.length);
-                if (firmwares.isEmpty) {
-                  return const Padding(
+              children: [
+                _Header(count: firmwares.length),
+                if (firmwares.isEmpty)
+                  const Padding(
                     padding: EdgeInsets.all(24),
                     child: Center(child: Text('暂无可用自制固件，请稍后刷新')),
-                  );
-                }
-                final firmware = firmwares[index - 1];
-                return FirmwareCard(
-                  firmware: firmware,
-                  isDownloading: _downloadProgress.containsKey(firmware.id),
-                  downloadProgress: _downloadProgress[firmware.id],
-                  onDownload: () => _download(firmware),
-                  onFlash: () async {
-                    if (_localPaths[firmware.id] == null && firmware.localPath == null) {
-                      await _download(firmware);
-                    }
-                    if (mounted) _openFlash(firmware);
-                  },
-                );
-              },
+                  )
+                else
+                  FirmwareCard(
+                    firmwares: firmwares,
+                    isDownloading: (firmware) => _downloadProgress.containsKey(firmware.id),
+                    downloadProgress: (firmware) => _downloadProgress[firmware.id],
+                    onDownload: _download,
+                    onFlash: (firmware) async {
+                      if (_localPaths[firmware.id] == null && firmware.localPath == null) {
+                        await _download(firmware);
+                      }
+                      if (mounted) _openFlash(firmware);
+                    },
+                  ),
+              ],
             ),
           );
         },
@@ -145,7 +143,7 @@ class _Header extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '自制固件源 · 共 $count 个版本，下拉刷新',
+                  '自制固件源 · 一个入口 · $count 个历史版本',
                   style: const TextStyle(color: Colors.white70),
                 ),
               ],

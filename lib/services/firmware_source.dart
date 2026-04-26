@@ -8,7 +8,7 @@ import '../models/firmware.dart';
 /// Vink 官方固件源。当前收录 Vink-PaperS3，后续可继续扩展其他设备。
 class VinkSource {
   static const String _releasesUrl =
-      'https://api.github.com/repos/Vivitoto/M5PaperS3-Firmware/releases';
+      'https://api.github.com/repos/Vivitoto/Vink-Firmware/releases';
 
   final http.Client _client;
 

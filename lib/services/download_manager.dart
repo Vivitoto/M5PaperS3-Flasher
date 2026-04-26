@@ -7,6 +7,22 @@ import 'package:path_provider/path_provider.dart';
 
 import '../models/firmware.dart';
 
+enum LocalFirmwareStatus { none, partial, complete }
+
+class LocalFirmwareInfo {
+  const LocalFirmwareInfo({
+    required this.status,
+    this.filePath,
+    this.receivedBytes = 0,
+    this.totalBytes,
+  });
+
+  final LocalFirmwareStatus status;
+  final String? filePath;
+  final int receivedBytes;
+  final int? totalBytes;
+}
+
 class DownloadProgress {
   const DownloadProgress({
     required this.receivedBytes,
@@ -29,13 +45,69 @@ class DownloadManager {
 
   final http.Client _client;
 
-  Stream<DownloadProgress> download(Firmware firmware) async* {
-    final directory = await getTemporaryDirectory();
-    final safeName = '${firmware.id.replaceAll(RegExp(r'[^a-zA-Z0-9_.-]'), '_')}.bin';
-    final file = File('${directory.path}/$safeName');
+  Future<LocalFirmwareInfo> localInfo(Firmware firmware) async {
+    final file = await _targetFile(firmware);
     final tempFile = File('${file.path}.part');
+    final expectedSize = firmware.sizeBytes;
 
-    final existing = await tempFile.exists() ? await tempFile.length() : 0;
+    if (await file.exists()) {
+      final length = await file.length();
+      if (expectedSize == null || expectedSize <= 0 || length == expectedSize) {
+        return LocalFirmwareInfo(
+          status: LocalFirmwareStatus.complete,
+          filePath: file.path,
+          receivedBytes: length,
+          totalBytes: expectedSize ?? length,
+        );
+      }
+    }
+
+    if (await tempFile.exists()) {
+      final length = await tempFile.length();
+      if (length > 0) {
+        return LocalFirmwareInfo(
+          status: LocalFirmwareStatus.partial,
+          receivedBytes: length,
+          totalBytes: expectedSize,
+        );
+      }
+    }
+
+    return LocalFirmwareInfo(
+      status: LocalFirmwareStatus.none,
+      totalBytes: expectedSize,
+    );
+  }
+
+  Stream<DownloadProgress> download(Firmware firmware, {bool force = false}) async* {
+    final file = await _targetFile(firmware);
+    final tempFile = File('${file.path}.part');
+    final expectedSize = firmware.sizeBytes;
+
+    if (force) {
+      if (await file.exists()) await file.delete();
+      if (await tempFile.exists()) await tempFile.delete();
+    } else if (await file.exists()) {
+      final length = await file.length();
+      if (expectedSize == null || expectedSize <= 0 || length == expectedSize) {
+        final verified = await verify(file, firmware.hash);
+        yield DownloadProgress(
+          receivedBytes: length,
+          totalBytes: expectedSize ?? length,
+          filePath: file.path,
+          verified: verified,
+        );
+        return;
+      }
+      await file.delete();
+    }
+
+    var existing = await tempFile.exists() ? await tempFile.length() : 0;
+    if (expectedSize != null && expectedSize > 0 && existing > expectedSize) {
+      await tempFile.delete();
+      existing = 0;
+    }
+
     final request = http.Request('GET', Uri.parse(firmware.downloadUrl));
     if (existing > 0) request.headers['Range'] = 'bytes=$existing-';
 
@@ -55,8 +127,15 @@ class DownloadManager {
       throw Exception('Download failed: HTTP ${response.statusCode}');
     }
 
+    // 服务器不支持 Range 时会返回 200。此时必须重下，避免把完整文件追加到半截文件后面。
+    final append = existing > 0 && response.statusCode == 206;
+    if (!append && await tempFile.exists()) {
+      await tempFile.delete();
+      existing = 0;
+    }
+
     final total = _contentLength(response, existing);
-    final sink = tempFile.openWrite(mode: FileMode.append);
+    final sink = tempFile.openWrite(mode: append ? FileMode.append : FileMode.write);
     var received = existing;
 
     try {
@@ -79,6 +158,12 @@ class DownloadManager {
       filePath: file.path,
       verified: verified,
     );
+  }
+
+  Future<File> _targetFile(Firmware firmware) async {
+    final directory = await getTemporaryDirectory();
+    final safeName = '${firmware.id.replaceAll(RegExp(r'[^a-zA-Z0-9_.-]'), '_')}.bin';
+    return File('${directory.path}/$safeName');
   }
 
   int? _contentLength(http.StreamedResponse response, int offset) {

@@ -19,28 +19,65 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
   late Future<List<Firmware>> _future;
   final Map<String, double?> _downloadProgress = {};
   final Map<String, String> _localPaths = {};
+  final Map<String, LocalFirmwareStatus> _localStatus = {};
+  final Map<String, int> _partialBytes = {};
 
   @override
   void initState() {
     super.initState();
-    _future = _repository.fetchAllFirmwares();
+    _future = _loadFirmwares();
+  }
+
+  Future<List<Firmware>> _loadFirmwares() async {
+    final firmwares = await _repository.fetchAllFirmwares();
+    await _hydrateLocalState(firmwares);
+    return firmwares;
+  }
+
+  Future<void> _hydrateLocalState(List<Firmware> firmwares) async {
+    for (final firmware in firmwares) {
+      final info = await _downloadManager.localInfo(firmware);
+      _localStatus[firmware.id] = info.status;
+      if (info.filePath != null) {
+        _localPaths[firmware.id] = info.filePath!;
+      } else {
+        _localPaths.remove(firmware.id);
+      }
+      if (info.status == LocalFirmwareStatus.partial) {
+        _partialBytes[firmware.id] = info.receivedBytes;
+      } else {
+        _partialBytes.remove(firmware.id);
+      }
+    }
   }
 
   Future<void> _refresh() async {
-    setState(() => _future = _repository.fetchAllFirmwares());
+    setState(() => _future = _loadFirmwares());
     await _future;
   }
 
-  Future<void> _download(Firmware firmware) async {
-    setState(() => _downloadProgress[firmware.id] = null);
+  Future<void> _download(Firmware firmware, {bool force = false}) async {
+    setState(() {
+      _downloadProgress[firmware.id] = null;
+      if (force) {
+        _localStatus[firmware.id] = LocalFirmwareStatus.none;
+        _localPaths.remove(firmware.id);
+        _partialBytes.remove(firmware.id);
+      }
+    });
     try {
-      await for (final progress in _downloadManager.download(firmware)) {
+      await for (final progress in _downloadManager.download(firmware, force: force)) {
         if (!mounted) return;
         setState(() {
           _downloadProgress[firmware.id] = progress.fraction;
           if (progress.filePath != null) {
             _localPaths[firmware.id] = progress.filePath!;
+            _localStatus[firmware.id] = LocalFirmwareStatus.complete;
+            _partialBytes.remove(firmware.id);
             _downloadProgress.remove(firmware.id);
+          } else {
+            _localStatus[firmware.id] = LocalFirmwareStatus.partial;
+            _partialBytes[firmware.id] = progress.receivedBytes;
           }
         });
       }
@@ -50,7 +87,15 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
       );
     } catch (error) {
       if (!mounted) return;
-      setState(() => _downloadProgress.remove(firmware.id));
+      final info = await _downloadManager.localInfo(firmware);
+      setState(() {
+        _downloadProgress.remove(firmware.id);
+        _localStatus[firmware.id] = info.status;
+        if (info.filePath != null) _localPaths[firmware.id] = info.filePath!;
+        if (info.status == LocalFirmwareStatus.partial) {
+          _partialBytes[firmware.id] = info.receivedBytes;
+        }
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('下载失败: $error')),
       );
@@ -103,12 +148,14 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
                     firmwares: firmwares,
                     isDownloading: (firmware) => _downloadProgress.containsKey(firmware.id),
                     downloadProgress: (firmware) => _downloadProgress[firmware.id],
+                    localStatus: (firmware) => _localStatus[firmware.id] ?? LocalFirmwareStatus.none,
+                    partialBytes: (firmware) => _partialBytes[firmware.id],
                     onDownload: _download,
                     onFlash: (firmware) async {
                       if (_localPaths[firmware.id] == null && firmware.localPath == null) {
                         await _download(firmware);
                       }
-                      if (mounted) _openFlash(firmware);
+                      if (mounted && _localPaths[firmware.id] != null) _openFlash(firmware);
                     },
                   ),
               ],

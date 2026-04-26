@@ -237,7 +237,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 8),
               Text(
                 '下载完成后会打开系统安装器；如被拦截，请允许 Vink Flasher 安装未知来源应用。',
-                style: theme.textTheme.bodySmall?.copyWith(color: Colors.white45, height: 1.35),
+                style: theme.textTheme.bodySmall?.copyWith(color: Colors.white38, height: 1.35),
               ),
             ],
           ),
@@ -275,7 +275,7 @@ class _Section extends StatelessWidget {
           children: [
             Text(title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -0.2)),
             const SizedBox(height: 3),
-            Text(subtitle, style: theme.textTheme.bodySmall?.copyWith(color: Colors.white45, height: 1.25)),
+            Text(subtitle, style: theme.textTheme.bodySmall?.copyWith(color: Colors.white38, height: 1.25)),
             const SizedBox(height: 12),
             ...children,
           ],

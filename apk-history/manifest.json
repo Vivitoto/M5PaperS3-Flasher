@@ -5,11 +5,19 @@
   "latestRelease": "https://github.com/Vivitoto/Vink-Flasher/releases/tag/latest",
   "versions": [
     {
-      "version": "0.3.10+31",
-      "apk": "vink-flasher-v0_3_10.apk",
+      "version": "0.3.11+32",
+      "apk": "vink-flasher-v0_3_11.apk",
       "status": "pending-release",
       "releasedAt": "2026-04-27",
       "recommended": true,
+      "summary": "Avoid blocking ROM chip-erase before full-image writes in the 0xFlash-compatible PaperS3 backend; rely on FLASH_BEGIN/FLASH_DATA range erase like 0xFlash."
+    },
+    {
+      "version": "0.3.10+31",
+      "apk": "vink-flasher-v0_3_10.apk",
+      "status": "archived-via-ci",
+      "releasedAt": "2026-04-27",
+      "recommended": false,
       "summary": "Switch PaperS3 official mode to an in-app 0xFlash-compatible ESP ROM flashing backend using Android USB serial directly, with robust USB-JTAG reset/sync and SPI flash parameter setup before full-image writes."
     },
     {

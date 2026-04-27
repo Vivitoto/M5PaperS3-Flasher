@@ -163,9 +163,12 @@ class EspFlasher {
         writtenBytes: 0,
         totalBytes: bytes.length,
         speedBytesPerSecond: 0,
-        stage: flashOffset == 0 ? '正在擦除整颗闪存' : '即将擦除并写入固件区域',
+        stage: flashOffset == 0 ? '完整镜像将按写入范围自动擦除' : '即将擦除并写入固件区域',
       );
-      await eraseFlash();
+      // Do not send ERASE_FLASH before writing a full PaperS3 image. 0xFlash
+      // relies on FLASH_BEGIN/FLASH_DATA to erase the target range, while the
+      // ROM chip-erase command can block for a long time on Android with no
+      // useful progress feedback.
     }
 
     yield FlashProgress(

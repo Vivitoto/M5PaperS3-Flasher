@@ -9,6 +9,20 @@ APK 二进制文件不直接放在源码树里，避免 Git 仓库被大文件�
 
 ## 版本记录
 
+### v0.3.3+24 / `vink-flasher-v0_3_3.apk`
+
+发布时间：2026-04-27
+
+归档位置：
+
+- Latest: <https://github.com/Vivitoto/Vink-Flasher/releases/download/latest/vink-flasher-v0_3_3.apk>
+- History: <https://github.com/Vivitoto/Vink-Flasher/releases/download/apk-history/vink-flasher-v0_3_3.apk>
+
+更新内容：
+
+- 修复 Android 原生 / Chaquopy bridge 异常只显示 Java 线程堆栈、丢失 Python/esptool 根因的问题。
+- 日志回调失败时不再让 PyException 逃逸到 MethodChannel，改为把完整错误返回到 App 烧录日志中。
+
 ### v0.3.2+23 / `vink-flasher-v0_3_2.apk`
 
 发布时间：2026-04-26

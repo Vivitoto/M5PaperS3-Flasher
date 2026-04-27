@@ -45,19 +45,25 @@ def _callback_emit_output(callback, text):
     if callback is None or not text:
         return
 
-    attr = _get_callback_attr(
-        callback,
-        "emitOutput",
-        "onOutput",
-        "on_output",
-        "accept",
-    )
-    if callable(attr):
-        attr(text)
-        return
+    try:
+        attr = _get_callback_attr(
+            callback,
+            "emitOutput",
+            "onOutput",
+            "on_output",
+            "accept",
+        )
+        if callable(attr):
+            attr(text)
+            return
 
-    if callable(callback):
-        callback(text)
+        if callable(callback):
+            callback(text)
+    except BaseException:
+        # Log forwarding must never abort esptool itself. If the Android-side
+        # callback fails, keep the original esptool/Python error in the returned
+        # JSON instead of escaping as a bare PyException through MethodChannel.
+        return
 
 
 class ForwardingBuffer:
@@ -154,7 +160,7 @@ def run_esptool(context, arguments, callback=None):
             except EsptoolCancelled:
                 cancelled = True
                 exit_code = 1
-    except Exception:
+    except BaseException:
         error = traceback.format_exc()
         output.write(error)
         if callback is not None:

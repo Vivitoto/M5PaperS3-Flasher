@@ -9,6 +9,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import org.json.JSONObject
+import com.chaquo.python.PyException
 
 class MainActivity : FlutterActivity() {
     private val channelName = "vink.flasher/esptool"
@@ -63,14 +64,33 @@ class MainActivity : FlutterActivity() {
                     )
                 }
             } catch (error: Throwable) {
+                val details = buildNativeErrorDetails(error)
+                emitLog(details)
                 mainHandler.post {
-                    result.error("esptool_failed", error.message, error.stackTraceToString())
+                    result.success(
+                        mapOf(
+                            "success" to false,
+                            "output" to details,
+                            "cancelled" to false,
+                        )
+                    )
                 }
             }
         }.start()
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
+
+    private fun buildNativeErrorDetails(error: Throwable): String {
+        val pyStack = if (error is PyException) error.stackTraceToString() else null
+        val message = error.message?.takeIf { it.isNotBlank() } ?: error::class.java.name
+        val javaStack = error.stackTraceToString()
+        return listOfNotNull(
+            "Native esptool bridge failed: $message",
+            pyStack?.let { "Python traceback:\n$it" },
+            "Java/Kotlin stacktrace:\n$javaStack",
+        ).joinToString("\n")
+    }
 
     private fun emitLog(text: String) {
         if (text.isBlank()) return

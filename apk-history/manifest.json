@@ -5,11 +5,19 @@
   "latestRelease": "https://github.com/Vivitoto/Vink-Flasher/releases/tag/latest",
   "versions": [
     {
-      "version": "0.3.3+24",
-      "apk": "vink-flasher-v0_3_3.apk",
+      "version": "0.3.4+25",
+      "apk": "vink-flasher-v0_3_4.apk",
       "status": "pending-release",
       "releasedAt": "2026-04-27",
       "recommended": true,
+      "summary": "Fix Android USB serial tiny reads by staging data through a larger native read buffer."
+    },
+    {
+      "version": "0.3.3+24",
+      "apk": "vink-flasher-v0_3_3.apk",
+      "status": "archived-via-ci",
+      "releasedAt": "2026-04-27",
+      "recommended": false,
       "summary": "Return full native/Python esptool bridge errors to the app instead of losing the root cause behind Java stack traces."
     },
     {

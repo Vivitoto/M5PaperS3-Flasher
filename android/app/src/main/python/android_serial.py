@@ -117,6 +117,7 @@ class AndroidSerial(SerialBase):
         self.connection = None
         self.fd = None
         self._port_handle = None
+        self._read_buffer = bytearray()
         super().__init__(*args, **kwargs)
 
     def open(self):
@@ -228,17 +229,37 @@ class AndroidSerial(SerialBase):
         self.connection = None
         self.fd = None
         self._port_handle = None
+        self._read_buffer.clear()
         self.is_open = False
 
     def read(self, size=16 * 1024):
         if not self._port_handle:
             raise SerialException("Port not open")
-        if size == -1:
+        if size is None or size < 0:
             size = 16 * 1024
-        data = bytearray(size)
+        if size == 0:
+            return b""
+
+        if len(self._read_buffer) >= size:
+            result = bytes(self._read_buffer[:size])
+            del self._read_buffer[:size]
+            return result
+
+        # usb-serial-for-android may throw "Read buffer too small" for tiny
+        # reads. esptool often reads one byte while syncing, so always read into
+        # a reasonably large native buffer and then return exactly the requested
+        # amount via this pySerial-compatible staging buffer.
+        native_buffer_size = max(size, 16 * 1024)
+        data = bytearray(native_buffer_size)
         timeout = int(self._timeout * 1000) if self._timeout is not None else 0
         num_bytes_read = self._port_handle.read(data, timeout)
-        return bytes(data[:num_bytes_read])
+        if num_bytes_read <= 0:
+            return b""
+
+        self._read_buffer.extend(data[:num_bytes_read])
+        result = bytes(self._read_buffer[:size])
+        del self._read_buffer[:size]
+        return result
 
     def write(self, data):
         if not self._port_handle:
@@ -252,6 +273,7 @@ class AndroidSerial(SerialBase):
     def reset_input_buffer(self):
         if not self._port_handle:
             raise SerialException("Port not open")
+        self._read_buffer.clear()
         try:
             self._port_handle.purgeHwBuffers(True, False)
         except UnsupportedOperationException:

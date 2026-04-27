@@ -9,6 +9,20 @@ APK 二进制文件不直接放在源码树里，避免 Git 仓库被大文件�
 
 ## 版本记录
 
+### v0.3.4+25 / `vink-flasher-v0_3_4.apk`
+
+发布时间：2026-04-27
+
+归档位置：
+
+- Latest: <https://github.com/Vivitoto/Vink-Flasher/releases/download/latest/vink-flasher-v0_3_4.apk>
+- History: <https://github.com/Vivitoto/Vink-Flasher/releases/download/apk-history/vink-flasher-v0_3_4.apk>
+
+更新内容：
+
+- 修复 esptool 连接阶段小字节读取触发 Android usb-serial-for-android `Read buffer too small` 的问题。
+- Android Serial read 改为内部大缓冲读取，再按 pySerial 语义返回 esptool 请求的字节数。
+
 ### v0.3.3+24 / `vink-flasher-v0_3_3.apk`
 
 发布时间：2026-04-27

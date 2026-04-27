@@ -81,6 +81,56 @@ class _FlashScreenState extends State<FlashScreen> {
 
   int get _effectiveBaudRate => _flashProfile == 'ink_box' ? 460800 : _baudRate;
 
+  bool _isEspressifUsbSerialJtag(SerialDeviceInfo info) {
+    final device = info.device;
+    final product = (device.productName ?? '').toLowerCase();
+    return (device.vid == 0x303a && device.pid == 0x1001) ||
+        product.contains('usb jtag') ||
+        product.contains('serial/jtag');
+  }
+
+  Future<SerialDeviceInfo> _resolveCurrentDeviceForFlashing(
+    SerialDeviceInfo initial, {
+    required bool preferEspressifBootloader,
+  }) async {
+    final devices = await EspFlasher.listDevices();
+    if (devices.isEmpty) {
+      throw Exception('未发现 USB 设备。请确认 PaperS3 已连接并处于下载模式后点刷新。');
+    }
+
+    SerialDeviceInfo? bySameId;
+    for (final candidate in devices) {
+      if (candidate.id == initial.id) {
+        bySameId = candidate;
+        break;
+      }
+    }
+
+    SerialDeviceInfo? preferred;
+    if (preferEspressifBootloader) {
+      for (final candidate in devices) {
+        if (_isEspressifUsbSerialJtag(candidate)) {
+          preferred = candidate;
+          break;
+        }
+      }
+    }
+
+    final resolved = preferred ?? bySameId ?? devices.first;
+    if (mounted) {
+      setState(() {
+        _devices = devices;
+        _selectedDevice = resolved;
+        _status = '已重新识别 USB 设备，准备打开串口';
+      });
+    }
+    if (resolved.id != initial.id) {
+      _addLog('下载模式后 USB 设备路径已变化: ${initial.id} → ${resolved.id}');
+    }
+    _addLog('当前 USB 设备: ${resolved.label}');
+    return resolved;
+  }
+
   String _baudRateLabel(int rate) {
     return switch (rate) {
       115200 => '115200（稳定）',
@@ -93,7 +143,8 @@ class _FlashScreenState extends State<FlashScreen> {
 
   void _addLog(String message) {
     final now = DateTime.now();
-    final time = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
+    final time =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
     setState(() {
       _logs.add('[$time] $message');
       if (_logs.length > 160) _logs.removeRange(0, _logs.length - 160);
@@ -159,7 +210,8 @@ class _FlashScreenState extends State<FlashScreen> {
       stage = '正在连接 ESP32 下载模式';
     } else if (line.contains('Chip is')) {
       stage = '已识别芯片';
-    } else if (line.contains('Uploading stub') || line.contains('Running stub')) {
+    } else if (line.contains('Uploading stub') ||
+        line.contains('Running stub')) {
       stage = '正在启动 esptool 写入助手';
     } else if (line.contains('Erasing flash') || line.contains('Erase size')) {
       stage = '正在擦除目标区域';
@@ -205,7 +257,8 @@ class _FlashScreenState extends State<FlashScreen> {
                   orElse: () => devices.first,
                 );
           _status = '发现 ${devices.length} 个 USB 设备，首次连接时系统可能会询问权限';
-          logMessage = '发现 ${devices.length} 个 USB 设备: ${_selectedDevice?.label ?? ''}';
+          logMessage =
+              '发现 ${devices.length} 个 USB 设备: ${_selectedDevice?.label ?? ''}';
         }
       });
       if (logMessage != null) _addLog(logMessage!);
@@ -219,7 +272,7 @@ class _FlashScreenState extends State<FlashScreen> {
   }
 
   Future<void> _flash() async {
-    final device = _selectedDevice;
+    var device = _selectedDevice;
     final path = widget.firmware.localPath;
     if (device == null) {
       setState(() => _status = '未选择 USB 串口设备');
@@ -240,18 +293,17 @@ class _FlashScreenState extends State<FlashScreen> {
     _addLog('本地文件: $path');
     _addLog('固件大小: ${await File(path).length()} bytes');
     _addLog('烧录逻辑: $_flashProfileLabel');
-    _addLog('写入方式: $_burnModeLabel, offset=0x${widget.firmware.flashOffset.toRadixString(16)}');
-    _addLog("烧录速度: ${_baudRateLabel(_effectiveBaudRate)}${_flashProfile == 'ink_box' ? '（兼容模式固定）' : ''}");
-    _addLog('打开 USB 串口: ${device.label}');
+    _addLog(
+        '写入方式: $_burnModeLabel, offset=0x${widget.firmware.flashOffset.toRadixString(16)}');
+    _addLog(
+        "烧录速度: ${_baudRateLabel(_effectiveBaudRate)}${_flashProfile == 'ink_box' ? '（兼容模式固定）' : ''}");
 
     try {
-      // 先用 Flutter USB 层打开一次设备，触发/确认 Android USB 授权；
-      // 真正烧录交给 Android 内置 Python esptool，避免 Dart 手写 ROM 协议不稳定。
-      await _flasher.connect(device, baudRate: _effectiveBaudRate);
-      await _flasher.close();
-      _addLog('USB 授权已确认，切换到官方 esptool 烧录引擎');
-
       if (_flashProfile == 'manual') {
+        // PaperS3 手动下载模式会让 USB 设备断开/重新枚举。旧流程在弹窗前
+        // 先打开一次串口，随后仍使用进入下载模式前的 deviceName，容易对着
+        // 旧路径同步而卡在 Connecting。官方模式必须先让用户进下载模式，
+        // 再重新扫描当前 VID:303a/PID:1001 设备并申请权限。
         setState(() => _status = '请按 M5Stack 官方方式进入下载模式：长按侧边电源键直到背面红灯闪烁');
         _addLog('官方模式: 等待用户长按电源键进入 PaperS3 下载模式（背面红灯闪烁）');
         final ready = await _confirmPaperS3DownloadMode();
@@ -260,47 +312,97 @@ class _FlashScreenState extends State<FlashScreen> {
           _addLog('用户取消：未开始 esptool 烧录');
           return;
         }
-        _addLog('用户确认已进入下载模式，esptool 将使用 --before no_reset 直接同步');
+        _addLog('用户确认已进入下载模式，重新扫描 Android USB 设备');
+        device = await _resolveCurrentDeviceForFlashing(device,
+            preferEspressifBootloader: true);
+        _addLog('esptool 将使用 --before no_reset 直接同步当前下载模式端口');
+      } else {
+        device = await _resolveCurrentDeviceForFlashing(device,
+            preferEspressifBootloader: false);
       }
 
-      setState(() {
-        _status = '正在启动官方 esptool 烧录引擎';
-        _progress = FlashProgress(
-          writtenBytes: 0,
-          totalBytes: 100,
-          speedBytesPerSecond: 0,
-          stage: '启动 esptool',
-        );
-      });
+      _addLog('打开 USB 串口: ${device.label}');
+      // 用 Flutter USB 层打开一次当前设备，触发/确认 Android USB 授权；
+      // 真正烧录交给 Android 内置 Python esptool，避免 Dart 手写 ROM 协议不稳定。
+      await _flasher.connect(device, baudRate: _effectiveBaudRate);
+      if (_flashProfile != 'manual') {
+        await _flasher.close();
+      }
+      _addLog(_flashProfile == 'manual'
+          ? 'USB 授权已确认，保持当前串口给内置烧录引擎使用'
+          : 'USB 授权已确认，切换到官方 esptool 烧录引擎');
 
-      final logSubscription = EsptoolService.instance.logs.listen(_handleEsptoolLog);
-      try {
-        final result = await EsptoolService.instance.flashFullImage(
-          port: device.id,
-          firmware: File(path),
-          flashOffset: widget.firmware.flashOffset,
-          baudRate: _effectiveBaudRate,
-          flashProfile: _flashProfile,
-        );
-        if (!mounted) return;
-        if (!result.success) {
-          throw Exception(result.output.isEmpty ? 'esptool 烧录失败' : result.output.split('\n').last);
-        }
+      if (_flashProfile == 'manual') {
         setState(() {
-          _status = '刷写完成，设备正在重启';
-          _progress = const FlashProgress(
-            writtenBytes: 100,
+          _status = '正在启动 0xFlash 兼容烧录引擎';
+          _progress = FlashProgress(
+            writtenBytes: 0,
             totalBytes: 100,
             speedBytesPerSecond: 0,
-            stage: 'Done, rebooting / 完成并重启',
+            stage: '启动内置烧录引擎',
           );
         });
+        _addLog('官方模式改用内置 ESP ROM 协议烧录，不再经过 Python esptool');
+        await for (final progress in _flasher.flashFile(
+          File(path),
+          flashOffset: widget.firmware.flashOffset,
+          eraseBeforeWrite: _burnMode == 'clean',
+        )) {
+          if (!mounted) return;
+          setState(() {
+            _progress = progress;
+            _status = progress.stage;
+          });
+        }
+        if (!mounted) return;
+        setState(() => _status = '刷写完成，设备正在重启');
         _addLog('刷写完成，设备正在重启');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('刷写完成')),
         );
-      } finally {
-        await logSubscription.cancel();
+      } else {
+        setState(() {
+          _status = '正在启动官方 esptool 烧录引擎';
+          _progress = FlashProgress(
+            writtenBytes: 0,
+            totalBytes: 100,
+            speedBytesPerSecond: 0,
+            stage: '启动 esptool',
+          );
+        });
+
+        final logSubscription =
+            EsptoolService.instance.logs.listen(_handleEsptoolLog);
+        try {
+          final result = await EsptoolService.instance.flashFullImage(
+            port: device.id,
+            firmware: File(path),
+            flashOffset: widget.firmware.flashOffset,
+            baudRate: _effectiveBaudRate,
+            flashProfile: _flashProfile,
+          );
+          if (!mounted) return;
+          if (!result.success) {
+            throw Exception(result.output.isEmpty
+                ? 'esptool 烧录失败'
+                : result.output.split('\n').last);
+          }
+          setState(() {
+            _status = '刷写完成，设备正在重启';
+            _progress = const FlashProgress(
+              writtenBytes: 100,
+              totalBytes: 100,
+              speedBytesPerSecond: 0,
+              stage: 'Done, rebooting / 完成并重启',
+            );
+          });
+          _addLog('刷写完成，设备正在重启');
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('刷写完成')),
+          );
+        } finally {
+          await logSubscription.cancel();
+        }
       }
     } on TimeoutException {
       if (!mounted) return;
@@ -332,12 +434,14 @@ class _FlashScreenState extends State<FlashScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(widget.firmware.name, style: Theme.of(context).textTheme.headlineSmall),
+                  Text(widget.firmware.name,
+                      style: Theme.of(context).textTheme.headlineSmall),
                   const SizedBox(height: 8),
                   Text('版本: ${widget.firmware.version}'),
                   Text('来源: ${widget.firmware.sourceLabel}'),
                   Text('本地文件: ${widget.firmware.localPath ?? '未下载'}'),
-                  Text('固件类型: ${widget.firmware.flashOffset == 0 ? '完整镜像 (0x0)' : 'App 分区 (0x${widget.firmware.flashOffset.toRadixString(16)})'}'),
+                  Text(
+                      '固件类型: ${widget.firmware.flashOffset == 0 ? '完整镜像 (0x0)' : 'App 分区 (0x${widget.firmware.flashOffset.toRadixString(16)})'}'),
                   Text('烧录逻辑: $_flashProfileLabel'),
                   Text('写入方式: $_burnModeLabel'),
                 ],
@@ -354,7 +458,8 @@ class _FlashScreenState extends State<FlashScreen> {
                   Row(
                     children: [
                       Expanded(
-                        child: Text('USB 设备', style: Theme.of(context).textTheme.titleMedium),
+                        child: Text('USB 设备',
+                            style: Theme.of(context).textTheme.titleMedium),
                       ),
                       IconButton(
                         onPressed: _busy || _scanning ? null : _scanDevices,
@@ -362,7 +467,8 @@ class _FlashScreenState extends State<FlashScreen> {
                             ? const SizedBox(
                                 width: 20,
                                 height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
                               )
                             : const Icon(Icons.refresh),
                       ),
@@ -377,10 +483,14 @@ class _FlashScreenState extends State<FlashScreen> {
                           leading: Radio<String>(
                             value: device.id,
                             groupValue: _selectedDevice?.id,
-                            onChanged: _busy ? null : (_) => setState(() => _selectedDevice = device),
+                            onChanged: _busy
+                                ? null
+                                : (_) =>
+                                    setState(() => _selectedDevice = device),
                           ),
                         )),
-                  Text("烧录速度: ${_baudRateLabel(_effectiveBaudRate)}${_flashProfile == 'ink_box' ? '（兼容模式固定）' : ''}"),
+                  Text(
+                      "烧录速度: ${_baudRateLabel(_effectiveBaudRate)}${_flashProfile == 'ink_box' ? '（兼容模式固定）' : ''}"),
                 ],
               ),
             ),
@@ -397,7 +507,8 @@ class _FlashScreenState extends State<FlashScreen> {
                     const SizedBox(height: 12),
                     LinearProgressIndicator(value: progress.percent / 100),
                     const SizedBox(height: 8),
-                    Text('${progress.percent.toStringAsFixed(1)}% · ${(progress.speedBytesPerSecond / 1024).toStringAsFixed(1)} KB/s'),
+                    Text(
+                        '${progress.percent.toStringAsFixed(1)}% · ${(progress.speedBytesPerSecond / 1024).toStringAsFixed(1)} KB/s'),
                   ],
                 ),
               ),
@@ -405,7 +516,8 @@ class _FlashScreenState extends State<FlashScreen> {
           if (_status != null)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Text(_status!, style: const TextStyle(color: Colors.white70)),
+              child:
+                  Text(_status!, style: const TextStyle(color: Colors.white70)),
             ),
           if (_logs.isNotEmpty) ...[
             Card(
@@ -416,7 +528,10 @@ class _FlashScreenState extends State<FlashScreen> {
                   children: [
                     Row(
                       children: [
-                        Expanded(child: Text('烧录日志', style: Theme.of(context).textTheme.titleMedium)),
+                        Expanded(
+                            child: Text('烧录日志',
+                                style:
+                                    Theme.of(context).textTheme.titleMedium)),
                         TextButton(
                           onPressed: _busy ? null : () => setState(_logs.clear),
                           child: const Text('清空'),
@@ -437,7 +552,11 @@ class _FlashScreenState extends State<FlashScreen> {
                         reverse: true,
                         child: SelectableText(
                           _logs.join('\n'),
-                          style: const TextStyle(fontSize: 11, height: 1.35, color: Colors.white70, fontFamily: 'monospace'),
+                          style: const TextStyle(
+                              fontSize: 11,
+                              height: 1.35,
+                              color: Colors.white70,
+                              fontFamily: 'monospace'),
                         ),
                       ),
                     ),
@@ -450,7 +569,10 @@ class _FlashScreenState extends State<FlashScreen> {
           FilledButton.icon(
             onPressed: _busy ? null : _flash,
             icon: _busy
-                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2))
                 : const Icon(Icons.flash_on),
             label: const Text('开始刷写'),
           ),

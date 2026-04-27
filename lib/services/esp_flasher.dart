@@ -38,8 +38,10 @@ class EspFlasher {
   static const int flashBeginCommand = 0x02;
   static const int flashDataCommand = 0x03;
   static const int flashEndCommand = 0x04;
+  static const int spiSetParamsCommand = 0x0B;
+  static const int spiAttachCommand = 0x0D;
   static const int eraseFlashCommand = 0xD0;
-  static const int blockSize = 0x400;
+  static const int blockSize = 0x1000;
   // Vink Flasher 优先烧录完整镜像：bootloader + partition + app + resources。
   // 完整镜像必须从 0x0 开始写入。
   static const int defaultFlashOffset = 0x0;
@@ -71,7 +73,8 @@ class EspFlasher {
     return parts.join(' · ');
   }
 
-  Future<void> connect(SerialDeviceInfo deviceInfo, {int baudRate = 115200}) async {
+  Future<void> connect(SerialDeviceInfo deviceInfo,
+      {int baudRate = 115200}) async {
     final port = await deviceInfo.device.create();
     if (port == null) {
       throw Exception('无法创建 USB 串口: ${deviceInfo.label}');
@@ -113,19 +116,19 @@ class EspFlasher {
   Future<void> enterBootloader() async {
     final port = _requirePort();
 
-    // ESP32 bootloader sequence:
+    // 0xFlash-compatible ESP32-S3 USB Serial/JTAG bootloader sequence:
     // DTR=false, RTS=true → wait 100ms
-    // DTR=true, RTS=false → wait 50ms
-    // DTR=false, RTS=false → wait 250ms
+    // DTR=true, RTS=false → wait 500ms
+    // DTR=false, RTS=false → wait 100ms
     await port.setDTR(false);
     await port.setRTS(true);
     await Future<void>.delayed(const Duration(milliseconds: 100));
     await port.setDTR(true);
     await port.setRTS(false);
-    await Future<void>.delayed(const Duration(milliseconds: 50));
+    await Future<void>.delayed(const Duration(milliseconds: 500));
     await port.setDTR(false);
     await port.setRTS(false);
-    await Future<void>.delayed(const Duration(milliseconds: 250));
+    await Future<void>.delayed(const Duration(milliseconds: 100));
   }
 
   Stream<FlashProgress> flashFile(
@@ -146,13 +149,23 @@ class EspFlasher {
     await enterBootloader();
     await sync();
 
+    yield FlashProgress(
+      writtenBytes: 0,
+      totalBytes: bytes.length,
+      speedBytesPerSecond: 0,
+      stage: '初始化 SPI Flash 参数',
+    );
+    await spiAttach();
+    await spiSetParams();
+
     if (eraseBeforeWrite) {
       yield FlashProgress(
         writtenBytes: 0,
         totalBytes: bytes.length,
         speedBytesPerSecond: 0,
-        stage: flashOffset == 0 ? '完整镜像将覆盖整颗闪存' : '即将擦除并写入固件区域',
+        stage: flashOffset == 0 ? '正在擦除整颗闪存' : '即将擦除并写入固件区域',
       );
+      await eraseFlash();
     }
 
     yield FlashProgress(
@@ -167,11 +180,13 @@ class EspFlasher {
     var written = 0;
     while (written < bytes.length) {
       final chunkLength = min(blockSize, bytes.length - written);
-      final chunk = Uint8List(blockSize)..setRange(0, chunkLength, bytes, written);
+      final chunk = Uint8List(blockSize)
+        ..setRange(0, chunkLength, bytes, written);
       await flashData(chunk, sequence);
       written += chunkLength;
       sequence++;
-      final elapsed = DateTime.now().difference(started).inMilliseconds / 1000.0;
+      final elapsed =
+          DateTime.now().difference(started).inMilliseconds / 1000.0;
       yield FlashProgress(
         writtenBytes: written,
         totalBytes: bytes.length,
@@ -194,8 +209,50 @@ class EspFlasher {
     for (var i = 0; i < 32; i++) {
       payload.add(0x55);
     }
-    await _sendCommand(syncCommand, Uint8List.fromList(payload));
-    await _readCommandResponse(syncCommand, timeout: const Duration(seconds: 2), checkStatus: false);
+
+    Object? lastError;
+    for (var attempt = 0; attempt < 10; attempt++) {
+      try {
+        _clearReadBuffer();
+        await _sendCommand(syncCommand, Uint8List.fromList(payload));
+        await _readCommandResponse(
+          syncCommand,
+          timeout: const Duration(seconds: 3),
+          checkStatus: false,
+        );
+        _clearReadBuffer();
+        return;
+      } catch (error) {
+        lastError = error;
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+    }
+    throw TimeoutException('ESP32 下载模式同步失败: $lastError');
+  }
+
+  Future<void> spiAttach() async {
+    await _sendCommand(spiAttachCommand, Uint8List(8));
+    await _readCommandResponse(
+      spiAttachCommand,
+      timeout: const Duration(seconds: 5),
+      checkStatus: false,
+    );
+  }
+
+  Future<void> spiSetParams() async {
+    final data = BytesBuilder();
+    data.add(_u32(0)); // SPI flash id, 0 means autodetect/default.
+    data.add(_u32(0x1000000)); // PaperS3 16MB flash size.
+    data.add(_u32(0x10000)); // block size.
+    data.add(_u32(0x1000)); // sector size.
+    data.add(_u32(0x100)); // page size.
+    data.add(_u32(0xFFFF)); // status mask.
+    await _sendCommand(spiSetParamsCommand, data.toBytes());
+    await _readCommandResponse(
+      spiSetParamsCommand,
+      timeout: const Duration(seconds: 5),
+      checkStatus: false,
+    );
   }
 
   Future<void> flashBegin(int size, int offset) async {
@@ -206,7 +263,8 @@ class EspFlasher {
     data.add(_u32(blockSize));
     data.add(_u32(offset));
     await _sendCommand(flashBeginCommand, data.toBytes());
-    await _readCommandResponse(flashBeginCommand, timeout: const Duration(seconds: 180));
+    await _readCommandResponse(flashBeginCommand,
+        timeout: const Duration(seconds: 180));
   }
 
   Future<void> flashData(Uint8List block, int sequence) async {
@@ -216,7 +274,8 @@ class EspFlasher {
     data.add(_u32(0));
     data.add(_u32(0));
     data.add(block);
-    await _sendCommand(flashDataCommand, data.toBytes(), checksum: _checksum(block));
+    await _sendCommand(flashDataCommand, data.toBytes(),
+        checksum: _checksum(block));
     await _readCommandResponse(flashDataCommand);
   }
 
@@ -227,7 +286,8 @@ class EspFlasher {
 
   Future<void> eraseFlash() async {
     await _sendCommand(eraseFlashCommand, Uint8List(0));
-    await _readCommandResponse(eraseFlashCommand, timeout: const Duration(seconds: 180));
+    await _readCommandResponse(eraseFlashCommand,
+        timeout: const Duration(seconds: 180));
   }
 
   Future<Uint8List> _readCommandResponse(
@@ -245,15 +305,18 @@ class EspFlasher {
       final dataLength = packet[2] | (packet[3] << 8);
       final data = packet.sublist(8);
       if (data.length < dataLength) {
-        throw StateError('ESP32 响应长度异常: command=0x${command.toRadixString(16)}');
+        throw StateError(
+            'ESP32 响应长度异常: command=0x${command.toRadixString(16)}');
       }
       if (checkStatus) {
         if (data.length < 2) {
-          throw StateError('ESP32 未返回写入状态: command=0x${command.toRadixString(16)}');
+          throw StateError(
+              'ESP32 未返回写入状态: command=0x${command.toRadixString(16)}');
         }
         if (data[0] != 0) {
           final reason = data.length > 1 ? data[1] : 0;
-          throw StateError('ESP32 拒绝烧录命令: command=0x${command.toRadixString(16)}, status=${data[0]}, reason=$reason');
+          throw StateError(
+              'ESP32 拒绝烧录命令: command=0x${command.toRadixString(16)}, status=${data[0]}, reason=$reason');
         }
       }
       return Uint8List.fromList(data);
@@ -261,7 +324,8 @@ class EspFlasher {
     throw TimeoutException('ESP32 未确认烧录命令: 0x${command.toRadixString(16)}');
   }
 
-  Future<void> _sendCommand(int command, Uint8List data, {int checksum = 0}) async {
+  Future<void> _sendCommand(int command, Uint8List data,
+      {int checksum = 0}) async {
     final packet = BytesBuilder();
     packet.addByte(0x00); // direction: host to ESP
     packet.addByte(command);
@@ -271,7 +335,8 @@ class EspFlasher {
     await _requirePort().write(_slipEncode(packet.toBytes()));
   }
 
-  Future<Uint8List> _readSlipPacket({Duration timeout = const Duration(seconds: 5)}) async {
+  Future<Uint8List> _readSlipPacket(
+      {Duration timeout = const Duration(seconds: 5)}) async {
     final deadline = DateTime.now().add(timeout);
     while (DateTime.now().isBefore(deadline)) {
       final end = _rxBuffer.indexOf(0xC0);
@@ -312,7 +377,11 @@ class EspFlasher {
       if (byte == 0xC0) continue;
       if (byte == 0xDB && i + 1 < packet.length) {
         final escaped = packet[++i];
-        out.add(escaped == 0xDC ? 0xC0 : escaped == 0xDD ? 0xDB : escaped);
+        out.add(escaped == 0xDC
+            ? 0xC0
+            : escaped == 0xDD
+                ? 0xDB
+                : escaped);
       } else {
         out.add(byte);
       }
@@ -320,11 +389,15 @@ class EspFlasher {
     return Uint8List.fromList(out);
   }
 
-  Uint8List _u16(int value) => Uint8List(2)
-    ..buffer.asByteData().setUint16(0, value, Endian.little);
+  void _clearReadBuffer() {
+    _rxBuffer.clear();
+  }
 
-  Uint8List _u32(int value) => Uint8List(4)
-    ..buffer.asByteData().setUint32(0, value, Endian.little);
+  Uint8List _u16(int value) =>
+      Uint8List(2)..buffer.asByteData().setUint16(0, value, Endian.little);
+
+  Uint8List _u32(int value) =>
+      Uint8List(4)..buffer.asByteData().setUint32(0, value, Endian.little);
 
   int _checksum(List<int> data) {
     var checksum = 0xEF;

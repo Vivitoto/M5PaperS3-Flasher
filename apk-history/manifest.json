@@ -5,11 +5,27 @@
   "latestRelease": "https://github.com/Vivitoto/Vink-Flasher/releases/tag/latest",
   "versions": [
     {
-      "version": "0.3.8+29",
-      "apk": "vink-flasher-v0_3_8.apk",
+      "version": "0.3.10+31",
+      "apk": "vink-flasher-v0_3_10.apk",
       "status": "pending-release",
       "releasedAt": "2026-04-27",
       "recommended": true,
+      "summary": "Switch PaperS3 official mode to an in-app 0xFlash-compatible ESP ROM flashing backend using Android USB serial directly, with robust USB-JTAG reset/sync and SPI flash parameter setup before full-image writes."
+    },
+    {
+      "version": "0.3.9+30",
+      "apk": "vink-flasher-v0_3_9.apk",
+      "status": "local-superseded",
+      "releasedAt": "2026-04-27",
+      "recommended": false,
+      "summary": "Fix PaperS3 official manual download-mode flow by entering download mode before Android USB permission/open, then rescanning the current ESP32-S3 USB Serial/JTAG port before esptool no_reset sync."
+    },
+    {
+      "version": "0.3.8+29",
+      "apk": "vink-flasher-v0_3_8.apk",
+      "status": "archived-via-ci",
+      "releasedAt": "2026-04-27",
+      "recommended": false,
       "summary": "Add M5Stack official PaperS3 manual download-mode flashing profile using esptool --before no_reset, with in-app red LED confirmation before connecting; keep the Ink Box stock reset compatibility fix."
     },
     {

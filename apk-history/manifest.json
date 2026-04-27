@@ -5,11 +5,19 @@
   "latestRelease": "https://github.com/Vivitoto/Vink-Flasher/releases/tag/latest",
   "versions": [
     {
-      "version": "0.3.11+32",
-      "apk": "vink-flasher-v0_3_11.apk",
+      "version": "0.3.12+33",
+      "apk": "vink-flasher-v0_3_12.apk",
       "status": "pending-release",
       "releasedAt": "2026-04-27",
       "recommended": true,
+      "summary": "Align the PaperS3 in-app ROM flashing backend with 0xFlash and split the UI into a PaperS3-specific path plus a reserved generic esptool profile for future LilyGo/ESP32 devices."
+    },
+    {
+      "version": "0.3.11+32",
+      "apk": "vink-flasher-v0_3_11.apk",
+      "status": "archived-via-ci",
+      "releasedAt": "2026-04-27",
+      "recommended": false,
       "summary": "Avoid blocking ROM chip-erase before full-image writes in the 0xFlash-compatible PaperS3 backend; rely on FLASH_BEGIN/FLASH_DATA range erase like 0xFlash."
     },
     {

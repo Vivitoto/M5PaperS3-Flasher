@@ -28,7 +28,7 @@ class _FlashScreenState extends State<FlashScreen> {
   final List<String> _logs = [];
   int _baudRate = 115200;
   String _burnMode = 'fast';
-  String _flashProfile = 'manual';
+  String _flashProfile = 'papers3';
 
   @override
   void initState() {
@@ -61,22 +61,24 @@ class _FlashScreenState extends State<FlashScreen> {
 
   String _normalizeFlashProfile(String? value) {
     return switch (value) {
-      'manual' || 'official' || 'no_reset' => 'manual',
+      'papers3' || 'manual' || 'official' || 'no_reset' => 'papers3',
+      'generic_esptool' || 'generic' || 'esptool' => 'generic_esptool',
       'auto_reset' || 'usb_reset' => 'auto_reset',
       'ink_box' || 'inkBox' => 'ink_box',
       // v0.3.6/v0.3.7 stored legacy profiles which still relied on
-      // automatic reset. Migrate them to the M5Stack-documented manual flow.
-      'stable' || 'compatible' => 'manual',
-      _ => 'manual',
+      // automatic reset. Keep them on the PaperS3-specific path.
+      'stable' || 'compatible' => 'papers3',
+      _ => 'papers3',
     };
   }
 
   String get _burnModeLabel => _burnMode == 'clean' ? '彻底烧录' : '快速烧录';
 
   String get _flashProfileLabel => switch (_flashProfile) {
-        'ink_box' => '兼容模式（Ink Box 验证）',
-        'auto_reset' => '自动模式（USB-JTAG reset 备用）',
-        _ => '官方模式（M5Stack 文档推荐）',
+        'generic_esptool' => '通用 esptool 模式（预留）',
+        'ink_box' => 'Ink Box 对照模式',
+        'auto_reset' => 'PaperS3 自动复位备用',
+        _ => 'PaperS3 专用模式（0xFlash 兼容）',
       };
 
   int get _effectiveBaudRate => _flashProfile == 'ink_box' ? 460800 : _baudRate;
@@ -299,40 +301,40 @@ class _FlashScreenState extends State<FlashScreen> {
         "烧录速度: ${_baudRateLabel(_effectiveBaudRate)}${_flashProfile == 'ink_box' ? '（兼容模式固定）' : ''}");
 
     try {
-      if (_flashProfile == 'manual') {
+      if (_flashProfile == 'papers3') {
         // PaperS3 手动下载模式会让 USB 设备断开/重新枚举。旧流程在弹窗前
         // 先打开一次串口，随后仍使用进入下载模式前的 deviceName，容易对着
-        // 旧路径同步而卡在 Connecting。官方模式必须先让用户进下载模式，
+        // 旧路径同步而卡在 Connecting。PaperS3 专用模式必须先让用户进下载模式，
         // 再重新扫描当前 VID:303a/PID:1001 设备并申请权限。
-        setState(() => _status = '请按 M5Stack 官方方式进入下载模式：长按侧边电源键直到背面红灯闪烁');
-        _addLog('官方模式: 等待用户长按电源键进入 PaperS3 下载模式（背面红灯闪烁）');
+        setState(() => _status = '请让 PaperS3 进入下载模式：长按侧边电源键直到背面红灯闪烁');
+        _addLog('PaperS3 专用模式: 等待用户长按电源键进入下载模式（背面红灯闪烁）');
         final ready = await _confirmPaperS3DownloadMode();
         if (!ready) {
           setState(() => _status = '已取消烧录');
-          _addLog('用户取消：未开始 esptool 烧录');
+          _addLog('用户取消：未开始烧录');
           return;
         }
         _addLog('用户确认已进入下载模式，重新扫描 Android USB 设备');
         device = await _resolveCurrentDeviceForFlashing(device,
             preferEspressifBootloader: true);
-        _addLog('esptool 将使用 --before no_reset 直接同步当前下载模式端口');
+        _addLog('将使用 0xFlash 兼容内置烧录引擎同步当前下载模式端口');
       } else {
         device = await _resolveCurrentDeviceForFlashing(device,
             preferEspressifBootloader: false);
       }
 
       _addLog('打开 USB 串口: ${device.label}');
-      // 用 Flutter USB 层打开一次当前设备，触发/确认 Android USB 授权；
-      // 真正烧录交给 Android 内置 Python esptool，避免 Dart 手写 ROM 协议不稳定。
+      // 用 Flutter USB 层打开一次当前设备，触发/确认 Android USB 授权。
+      // PaperS3 专用模式保留当前串口给内置 ROM 后端；其他模式释放后交给 Python esptool。
       await _flasher.connect(device, baudRate: _effectiveBaudRate);
-      if (_flashProfile != 'manual') {
+      if (_flashProfile != 'papers3') {
         await _flasher.close();
       }
-      _addLog(_flashProfile == 'manual'
-          ? 'USB 授权已确认，保持当前串口给内置烧录引擎使用'
-          : 'USB 授权已确认，切换到官方 esptool 烧录引擎');
+      _addLog(_flashProfile == 'papers3'
+          ? 'USB 授权已确认，保持当前串口给 PaperS3 专用烧录引擎使用'
+          : 'USB 授权已确认，切换到通用 esptool 烧录引擎');
 
-      if (_flashProfile == 'manual') {
+      if (_flashProfile == 'papers3') {
         setState(() {
           _status = '正在启动 0xFlash 兼容烧录引擎';
           _progress = FlashProgress(
@@ -342,7 +344,7 @@ class _FlashScreenState extends State<FlashScreen> {
             stage: '启动内置烧录引擎',
           );
         });
-        _addLog('官方模式改用内置 ESP ROM 协议烧录，不再经过 Python esptool');
+        _addLog('PaperS3 专用模式使用内置 0xFlash 兼容 ESP ROM 协议烧录');
         await for (final progress in _flasher.flashFile(
           File(path),
           flashOffset: widget.firmware.flashOffset,
@@ -362,7 +364,7 @@ class _FlashScreenState extends State<FlashScreen> {
         );
       } else {
         setState(() {
-          _status = '正在启动官方 esptool 烧录引擎';
+          _status = '正在启动通用 esptool 烧录引擎';
           _progress = FlashProgress(
             writtenBytes: 0,
             totalBytes: 100,

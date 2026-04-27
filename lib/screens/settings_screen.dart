@@ -16,7 +16,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _updateService = AppUpdateService();
   int _baudRate = 115200;
   String _burnMode = 'fast';
-  String _flashProfile = 'manual';
+  String _flashProfile = 'papers3';
   AppUpdateInfo? _updateInfo;
   bool _checkingUpdate = false;
   bool _downloadingUpdate = false;
@@ -56,20 +56,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   String _normalizeFlashProfile(String? value) {
     return switch (value) {
-      'manual' || 'official' || 'no_reset' => 'manual',
+      'papers3' || 'manual' || 'official' || 'no_reset' => 'papers3',
+      'generic_esptool' || 'generic' || 'esptool' => 'generic_esptool',
       'auto_reset' || 'usb_reset' => 'auto_reset',
       'ink_box' || 'inkBox' => 'ink_box',
       // v0.3.6/v0.3.7 stored legacy profiles which still relied on
-      // automatic reset. Migrate them to the M5Stack-documented manual flow.
-      'stable' || 'compatible' => 'manual',
-      _ => 'manual',
+      // automatic reset. Keep them on the PaperS3-specific path.
+      'stable' || 'compatible' => 'papers3',
+      _ => 'papers3',
     };
   }
 
   Future<void> _save() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('githubToken', _githubTokenController.text.trim());
-    await prefs.setString('customFirmwareUrl', _customUrlController.text.trim());
+    await prefs.setString(
+        'customFirmwareUrl', _customUrlController.text.trim());
     await prefs.setInt('baudRate', _baudRate);
     await prefs.setString('eraseOption', _burnMode);
     await prefs.setString('flashProfile', _flashProfile);
@@ -90,7 +92,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!mounted) return;
       setState(() {
         _updateInfo = info;
-        _updateStatus = info.hasUpdate ? '发现新版本 ${info.latestVersion}' : '当前已是最新版本 ${info.currentVersion}';
+        _updateStatus = info.hasUpdate
+            ? '发现新版本 ${info.latestVersion}'
+            : '当前已是最新版本 ${info.currentVersion}';
       });
     } catch (error) {
       if (!mounted) return;
@@ -114,7 +118,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         onProgress: (received, total) {
           if (!mounted) return;
           setState(() {
-            _updateProgress = total == null || total <= 0 ? null : received / total;
+            _updateProgress =
+                total == null || total <= 0 ? null : received / total;
             _updateStatus = total == null
                 ? '正在下载 ${_sizeLabel(received)}'
                 : '正在下载 ${_sizeLabel(received)} / ${_sizeLabel(total)}';
@@ -133,7 +138,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   String _sizeLabel(int bytes) {
-    if (bytes >= 1024 * 1024) return '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
+    if (bytes >= 1024 * 1024)
+      return '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
     if (bytes >= 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
     return '$bytes B';
   }
@@ -149,12 +155,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   String get _flashProfileSummary => switch (_flashProfile) {
+        'generic_esptool' => '通用模式：esptool chip auto，预留给 LilyGo/其他 ESP32',
         'ink_box' => '兼容模式：按 Ink Box 参数验证烧录',
         'auto_reset' => '自动模式：尝试 USB-JTAG DTR/RTS 复位',
-        _ => '官方模式：按 M5Stack 文档手动进入下载模式',
+        _ => 'PaperS3 专用模式：0xFlash 兼容烧录链路',
       };
 
-  String get _burnModeSummary => _burnMode == 'clean' ? '彻底烧录：先清空闪存再写入' : '快速烧录：直接写入完整固件';
+  String get _burnModeSummary =>
+      _burnMode == 'clean' ? '彻底烧录：按写入范围覆盖完整镜像' : '快速烧录：直接写入完整固件';
 
   @override
   Widget build(BuildContext context) {
@@ -173,36 +181,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 value: _baudRate,
                 decoration: const InputDecoration(labelText: '烧录速度'),
                 items: const [115200, 230400, 460800, 921600]
-                    .map((rate) => DropdownMenuItem(value: rate, child: Text(_baudRateLabel(rate))))
+                    .map((rate) => DropdownMenuItem(
+                        value: rate, child: Text(_baudRateLabel(rate))))
                     .toList(),
-                onChanged: (value) => setState(() => _baudRate = value ?? 115200),
+                onChanged: (value) =>
+                    setState(() => _baudRate = value ?? 115200),
               ),
               const SizedBox(height: 14),
-              Text('烧录逻辑', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+              Text('烧录逻辑',
+                  style: theme.textTheme.titleSmall
+                      ?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 8),
               _BurnModeCard(
-                selected: _flashProfile == 'manual',
-                title: '官方模式',
+                selected: _flashProfile == 'papers3',
+                title: 'PaperS3 专用模式',
                 badge: '推荐',
-                description: '按 M5Stack 官方文档：USB 连接后长按侧边电源键，背面红灯闪烁进入下载模式；esptool 使用 no_reset 直接同步。',
-                onTap: () => setState(() => _flashProfile = 'manual'),
+                description:
+                    '面向 Vink-PaperS3：按 M5Stack 官方方式进入下载模式，并使用 0xFlash 兼容的 ESP ROM 烧录链路。不要用于其他 ESP32 设备。',
+                onTap: () => setState(() => _flashProfile = 'papers3'),
+              ),
+              const SizedBox(height: 8),
+              _BurnModeCard(
+                selected: _flashProfile == 'generic_esptool',
+                title: '通用 esptool 模式',
+                badge: '预留',
+                description:
+                    '面向 LilyGo/其他 ESP32 设备扩展：chip auto、default_reset、hard_reset，由设备配置决定固件和 offset。当前仍需对应设备 profile 后再推荐使用。',
+                onTap: () => setState(() => _flashProfile = 'generic_esptool'),
               ),
               const SizedBox(height: 8),
               _BurnModeCard(
                 selected: _flashProfile == 'auto_reset',
-                title: '自动模式',
-                description: '尝试通过 USB-JTAG DTR/RTS 自动进入下载模式。作为备用，不再默认推荐。',
+                title: 'PaperS3 自动复位备用',
+                description:
+                    '尝试通过 USB-JTAG DTR/RTS 自动进入下载模式。作为 PaperS3 备用，不推荐给其他设备。',
                 onTap: () => setState(() => _flashProfile = 'auto_reset'),
               ),
               const SizedBox(height: 8),
               _BurnModeCard(
                 selected: _flashProfile == 'ink_box',
-                title: '兼容模式',
-                description: '按 Ink Box 参数验证：chip auto、default_reset、no-stub、固定 460800。仅用于对照测试。',
+                title: 'Ink Box 对照模式',
+                description:
+                    '按 Ink Box 参数验证：chip auto、default_reset、no-stub、固定 460800。仅用于对照测试。',
                 onTap: () => setState(() => _flashProfile = 'ink_box'),
               ),
               const SizedBox(height: 14),
-              Text('写入方式', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+              Text('写入方式',
+                  style: theme.textTheme.titleSmall
+                      ?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 8),
               _BurnModeCard(
                 selected: _burnMode == 'fast',
@@ -215,7 +241,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _BurnModeCard(
                 selected: _burnMode == 'clean',
                 title: '彻底烧录',
-                description: '写入完整镜像并覆盖整颗闪存。适合换固件、设备异常或残留数据导致问题。',
+                description: '写入完整镜像并覆盖目标写入范围。适合换固件、设备异常或残留数据导致问题。',
                 onTap: () => setState(() => _burnMode = 'clean'),
               ),
             ],
@@ -246,10 +272,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 10),
           _Section(
             title: '应用更新',
-            subtitle: updateInfo == null ? '检查 Vink Flasher 新版本' : '当前 ${updateInfo.currentVersion} · 最新 ${updateInfo.latestVersion}',
+            subtitle: updateInfo == null
+                ? '检查 Vink Flasher 新版本'
+                : '当前 ${updateInfo.currentVersion} · 最新 ${updateInfo.latestVersion}',
             children: [
               if (_updateStatus != null) ...[
-                Text(_updateStatus!, style: theme.textTheme.bodySmall?.copyWith(color: Colors.white70)),
+                Text(_updateStatus!,
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: Colors.white70)),
                 const SizedBox(height: 10),
               ],
               if (_downloadingUpdate) ...[
@@ -260,9 +290,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: _checkingUpdate || _downloadingUpdate ? null : _checkUpdate,
+                      onPressed: _checkingUpdate || _downloadingUpdate
+                          ? null
+                          : _checkUpdate,
                       icon: _checkingUpdate
-                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2))
                           : const Icon(Icons.system_update_alt_rounded),
                       label: const Text('检查更新'),
                     ),
@@ -270,7 +305,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: FilledButton.icon(
-                      onPressed: updateInfo?.hasUpdate == true && !_checkingUpdate && !_downloadingUpdate
+                      onPressed: updateInfo?.hasUpdate == true &&
+                              !_checkingUpdate &&
+                              !_downloadingUpdate
                           ? _downloadAndInstallUpdate
                           : null,
                       icon: const Icon(Icons.download_rounded),
@@ -282,7 +319,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 8),
               Text(
                 '下载完成后会打开系统安装器；如被拦截，请允许 Vink Flasher 安装未知来源应用。',
-                style: theme.textTheme.bodySmall?.copyWith(color: Colors.white38, height: 1.35),
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: Colors.white38, height: 1.35),
               ),
             ],
           ),
@@ -318,9 +356,13 @@ class _Section extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -0.2)),
+            Text(title,
+                style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800, letterSpacing: -0.2)),
             const SizedBox(height: 3),
-            Text(subtitle, style: theme.textTheme.bodySmall?.copyWith(color: Colors.white38, height: 1.25)),
+            Text(subtitle,
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: Colors.white38, height: 1.25)),
             const SizedBox(height: 12),
             ...children,
           ],
@@ -349,7 +391,9 @@ class _BurnModeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final borderColor = selected ? Colors.white : Colors.white12;
-    final backgroundColor = selected ? Colors.white.withOpacity(0.08) : Colors.white.withOpacity(0.03);
+    final backgroundColor = selected
+        ? Colors.white.withOpacity(0.08)
+        : Colors.white.withOpacity(0.03);
 
     return InkWell(
       onTap: onTap,
@@ -368,7 +412,9 @@ class _BurnModeCard extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 1),
               child: Icon(
-                selected ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+                selected
+                    ? Icons.radio_button_checked_rounded
+                    : Icons.radio_button_off_rounded,
                 size: 20,
                 color: selected ? Colors.white : Colors.white38,
               ),
@@ -381,11 +427,14 @@ class _BurnModeCard extends StatelessWidget {
                   Row(
                     children: [
                       Expanded(
-                        child: Text(title, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                        child: Text(title,
+                            style: theme.textTheme.titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w800)),
                       ),
                       if (badge != null)
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
                             color: selected ? Colors.white : Colors.white10,
                             borderRadius: BorderRadius.circular(999),
@@ -401,7 +450,9 @@ class _BurnModeCard extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 5),
-                  Text(description, style: theme.textTheme.bodySmall?.copyWith(color: Colors.white54, height: 1.35)),
+                  Text(description,
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: Colors.white54, height: 1.35)),
                 ],
               ),
             ),

@@ -41,7 +41,7 @@ class EspFlasher {
   static const int spiSetParamsCommand = 0x0B;
   static const int spiAttachCommand = 0x0D;
   static const int eraseFlashCommand = 0xD0;
-  static const int blockSize = 0x1000;
+  static const int blockSize = 0x400;
   // Vink Flasher 优先烧录完整镜像：bootloader + partition + app + resources。
   // 完整镜像必须从 0x0 开始写入。
   static const int defaultFlashOffset = 0x0;
@@ -56,7 +56,7 @@ class EspFlasher {
     return [
       for (final device in devices)
         SerialDeviceInfo(
-          id: device.deviceName ?? '${device.vid}:${device.pid}',
+          id: device.deviceName,
           label: _deviceLabel(device),
           device: device,
         ),
@@ -67,7 +67,7 @@ class EspFlasher {
     final parts = <String>[
       if ((device.productName ?? '').isNotEmpty) device.productName!,
       if ((device.manufacturerName ?? '').isNotEmpty) device.manufacturerName!,
-      if ((device.deviceName ?? '').isNotEmpty) device.deviceName!,
+      if (device.deviceName.isNotEmpty) device.deviceName,
       'VID:${device.vid?.toRadixString(16) ?? 'unknown'} PID:${device.pid?.toRadixString(16) ?? 'unknown'}',
     ];
     return parts.join(' · ');
@@ -199,6 +199,15 @@ class EspFlasher {
     }
 
     await flashEnd(reboot: reboot);
+    if (reboot) {
+      yield FlashProgress(
+        writtenBytes: bytes.length,
+        totalBytes: bytes.length,
+        speedBytesPerSecond: 0,
+        stage: '正在重启设备',
+      );
+      await hardReset();
+    }
     yield FlashProgress(
       writtenBytes: bytes.length,
       totalBytes: bytes.length,
@@ -260,14 +269,36 @@ class EspFlasher {
 
   Future<void> flashBegin(int size, int offset) async {
     final blocks = (size + blockSize - 1) ~/ blockSize;
+    final eraseSize = ((size + 0xFFF) ~/ 0x1000) * 0x1000;
     final data = BytesBuilder();
-    data.add(_u32(size));
+    data.add(_u32(eraseSize));
     data.add(_u32(blocks));
     data.add(_u32(blockSize));
     data.add(_u32(offset));
-    await _sendCommand(flashBeginCommand, data.toBytes());
-    await _readCommandResponse(flashBeginCommand,
-        timeout: const Duration(seconds: 180));
+    // ESP32-S3 ROM supports encrypted flash writes and expects a fifth
+    // FLASH_BEGIN argument even when encryption is not requested. 0xFlash sends
+    // false/0 here and uses 1024-byte ROM flash blocks.
+    data.add(_u32(0));
+    final packet = data.toBytes();
+    final timeoutMs = max(5000, ((eraseSize * 1000) / 175000).round() + 15000);
+    Object? lastError;
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      try {
+        _clearReadBuffer();
+        await _sendCommand(flashBeginCommand, packet);
+        await _readCommandResponse(
+          flashBeginCommand,
+          timeout: Duration(milliseconds: timeoutMs),
+        );
+        return;
+      } catch (error) {
+        lastError = error;
+        if (attempt == 3) break;
+        await _drainResponses(const Duration(seconds: 10));
+        _clearReadBuffer();
+      }
+    }
+    throw StateError('FLASH_BEGIN failed after 3 attempts: $lastError');
   }
 
   Future<void> flashData(Uint8List block, int sequence) async {
@@ -285,6 +316,17 @@ class EspFlasher {
   Future<void> flashEnd({bool reboot = true}) async {
     await _sendCommand(flashEndCommand, _u32(reboot ? 0 : 1));
     await _readCommandResponse(flashEndCommand);
+  }
+
+  Future<void> hardReset() async {
+    final port = _requirePort();
+    await port.setDTR(false);
+    await port.setRTS(false);
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    await port.setDTR(true);
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    await port.setDTR(false);
+    await Future<void>.delayed(const Duration(milliseconds: 500));
   }
 
   Future<void> eraseFlash() async {
@@ -306,23 +348,19 @@ class EspFlasher {
       if (response != 0x01 || op != command) continue;
 
       final dataLength = packet[2] | (packet[3] << 8);
+      final value =
+          packet[4] | (packet[5] << 8) | (packet[6] << 16) | (packet[7] << 24);
       final data = packet.sublist(8);
       if (data.length < dataLength) {
         throw StateError(
             'ESP32 响应长度异常: command=0x${command.toRadixString(16)}');
       }
-      if (checkStatus) {
-        if (data.length < 2) {
-          throw StateError(
-              'ESP32 未返回写入状态: command=0x${command.toRadixString(16)}');
-        }
-        if (data[0] != 0) {
-          final reason = data.length > 1 ? data[1] : 0;
-          throw StateError(
-              'ESP32 拒绝烧录命令: command=0x${command.toRadixString(16)}, status=${data[0]}, reason=$reason');
-        }
+      if (checkStatus && value != 0) {
+        throw StateError(
+          'ESP32 拒绝烧录命令: command=0x${command.toRadixString(16)}, value=$value, data=${_hex(data.take(dataLength).toList())}',
+        );
       }
-      return Uint8List.fromList(data);
+      return Uint8List.fromList(data.take(dataLength).toList());
     }
     throw TimeoutException('ESP32 未确认烧录命令: 0x${command.toRadixString(16)}');
   }
@@ -392,9 +430,23 @@ class EspFlasher {
     return Uint8List.fromList(out);
   }
 
+  Future<void> _drainResponses(Duration duration) async {
+    final deadline = DateTime.now().add(duration);
+    while (DateTime.now().isBefore(deadline)) {
+      try {
+        await _readSlipPacket(timeout: const Duration(milliseconds: 250));
+      } catch (_) {
+        // Keep draining until the deadline, mirroring 0xFlash's retry pause.
+      }
+    }
+  }
+
   void _clearReadBuffer() {
     _rxBuffer.clear();
   }
+
+  String _hex(List<int> bytes) =>
+      bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join(' ');
 
   Uint8List _u16(int value) =>
       Uint8List(2)..buffer.asByteData().setUint16(0, value, Endian.little);

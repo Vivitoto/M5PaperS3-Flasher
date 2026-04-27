@@ -40,10 +40,31 @@ class EsptoolService {
     required int flashOffset,
     int baudRate = 115200,
     String flashSize = '16MB',
-    String flashProfile = 'manual',
+    String flashProfile = 'papers3',
   }) async {
-    final offset = flashOffset == 0 ? '0x0' : '0x${flashOffset.toRadixString(16)}';
+    final offset =
+        flashOffset == 0 ? '0x0' : '0x${flashOffset.toRadixString(16)}';
     final args = switch (flashProfile) {
+      'generic_esptool' || 'generic' || 'esptool' => <String>[
+          // Generic expansion profile for LilyGo/other ESP32 devices: leave
+          // chip detection and reset handling to esptool. Device-specific
+          // manifests should provide the correct firmware and offset.
+          '--chip',
+          'auto',
+          '--port',
+          port,
+          '--baud',
+          baudRate.toString(),
+          '--before',
+          'default_reset',
+          '--after',
+          'hard_reset',
+          '--no-stub',
+          'write_flash',
+          '-z',
+          offset,
+          firmware.path,
+        ],
       'ink_box' || 'compatible' => <String>[
           // Ink Box compatibility profile: keep the official esptool flow,
           // default reset, no stub, compressed write and 460800 baud for A/B
@@ -90,9 +111,8 @@ class EsptoolService {
           firmware.path,
         ],
       _ => <String>[
-          // M5Stack official PaperS3 flow: user enters download mode manually
-          // by long-pressing the side power button until the rear status LED
-          // flashes red, then esptool connects without toggling DTR/RTS.
+          // Legacy PaperS3 manual esptool fallback. The default PaperS3 path in
+          // FlashScreen uses the in-app 0xFlash-compatible backend instead.
           '--chip',
           'esp32s3',
           '--port',
@@ -115,7 +135,8 @@ class EsptoolService {
         ],
     };
 
-    final raw = await _channel.invokeMethod<Map<dynamic, dynamic>>('runEsptool', {'args': args});
+    final raw = await _channel
+        .invokeMethod<Map<dynamic, dynamic>>('runEsptool', {'args': args});
     final result = raw ?? const <dynamic, dynamic>{};
     return EsptoolResult(
       success: result['success'] == true,

@@ -5,8 +5,8 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
-def appVersionName = "0.3.11"
-def appVersionCode = 32
+def appVersionName = "0.3.12"
+def appVersionCode = 33
 
 android {
     namespace "vink.flasher"

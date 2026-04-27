@@ -26,7 +26,7 @@ class _FlashScreenState extends State<FlashScreen> {
   bool _scanning = false;
   String? _status;
   final List<String> _logs = [];
-  int _baudRate = 115200;
+  int _baudRate = 921600;
   String _burnMode = 'fast';
   String _flashProfile = 'papers3';
 
@@ -46,7 +46,7 @@ class _FlashScreenState extends State<FlashScreen> {
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _baudRate = prefs.getInt('baudRate') ?? 115200;
+      _baudRate = prefs.getInt('baudRate') ?? 921600;
       _burnMode = _normalizeBurnMode(prefs.getString('eraseOption'));
       _flashProfile = _normalizeFlashProfile(prefs.getString('flashProfile'));
     });
@@ -325,13 +325,12 @@ class _FlashScreenState extends State<FlashScreen> {
 
       _addLog('打开 USB 串口: ${device.label}');
       // 用 Flutter USB 层打开一次当前设备，触发/确认 Android USB 授权。
-      // PaperS3 专用模式保留当前串口给内置 ROM 后端；其他模式释放后交给 Python esptool。
+      // PaperS3 专用模式随后释放串口，交给 Android 原生烧录后端高速收发；
+      // 其他模式释放后交给 Python esptool。
       await _flasher.connect(device, baudRate: _effectiveBaudRate);
-      if (_flashProfile != 'papers3') {
-        await _flasher.close();
-      }
+      await _flasher.close();
       _addLog(_flashProfile == 'papers3'
-          ? 'USB 授权已确认，保持当前串口给 PaperS3 专用烧录引擎使用'
+          ? 'USB 授权已确认，切换到 Android 原生 PaperS3 烧录后端'
           : 'USB 授权已确认，切换到通用 esptool 烧录引擎');
 
       if (_flashProfile == 'papers3') {
@@ -344,24 +343,39 @@ class _FlashScreenState extends State<FlashScreen> {
             stage: '启动内置烧录引擎',
           );
         });
-        _addLog('PaperS3 专用模式使用内置 0xFlash 兼容 ESP ROM 协议烧录');
-        await for (final progress in _flasher.flashFile(
-          File(path),
-          flashOffset: widget.firmware.flashOffset,
-          eraseBeforeWrite: _burnMode == 'clean',
-        )) {
+        _addLog('PaperS3 专用模式使用 Android 原生 0xFlash 兼容 ESP ROM 协议烧录');
+        final logSubscription =
+            EsptoolService.instance.logs.listen(_handleEsptoolLog);
+        final progressSubscription =
+            EsptoolService.instance.paperS3Progress.listen((progress) {
           if (!mounted) return;
           setState(() {
             _progress = progress;
             _status = progress.stage;
           });
+        });
+        try {
+          final result = await EsptoolService.instance.flashPaperS3Native(
+            deviceName: device.id,
+            firmware: File(path),
+            flashOffset: widget.firmware.flashOffset,
+            baudRate: _effectiveBaudRate,
+          );
+          if (!mounted) return;
+          if (!result.success) {
+            throw Exception(result.output.isEmpty
+                ? 'Android 原生 PaperS3 烧录失败'
+                : result.output.split('\n').last);
+          }
+          setState(() => _status = '刷写完成，设备正在重启');
+          _addLog('刷写完成，设备正在重启');
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('刷写完成')),
+          );
+        } finally {
+          await progressSubscription.cancel();
+          await logSubscription.cancel();
         }
-        if (!mounted) return;
-        setState(() => _status = '刷写完成，设备正在重启');
-        _addLog('刷写完成，设备正在重启');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('刷写完成')),
-        );
       } else {
         setState(() {
           _status = '正在启动通用 esptool 烧录引擎';

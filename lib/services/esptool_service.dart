@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 
+import 'esp_flasher.dart';
+
 class EsptoolResult {
   const EsptoolResult({
     required this.success,
@@ -24,13 +26,27 @@ class EsptoolService {
   static const MethodChannel _channel = MethodChannel('vink.flasher/esptool');
 
   final StreamController<String> _logs = StreamController<String>.broadcast();
+  final StreamController<FlashProgress> _paperS3Progress =
+      StreamController<FlashProgress>.broadcast();
 
   Stream<String> get logs => _logs.stream;
+  Stream<FlashProgress> get paperS3Progress => _paperS3Progress.stream;
 
   Future<void> _handleNativeCall(MethodCall call) async {
     if (call.method == 'esptoolLog') {
       final text = call.arguments?.toString() ?? '';
       if (text.isNotEmpty) _logs.add(text);
+    } else if (call.method == 'paperS3Progress') {
+      final args = call.arguments;
+      if (args is Map) {
+        _paperS3Progress.add(FlashProgress(
+          writtenBytes: (args['writtenBytes'] as num?)?.toInt() ?? 0,
+          totalBytes: (args['totalBytes'] as num?)?.toInt() ?? 0,
+          speedBytesPerSecond:
+              (args['speedBytesPerSecond'] as num?)?.toDouble() ?? 0,
+          stage: args['stage']?.toString() ?? '',
+        ));
+      }
     }
   }
 
@@ -137,6 +153,31 @@ class EsptoolService {
 
     final raw = await _channel
         .invokeMethod<Map<dynamic, dynamic>>('runEsptool', {'args': args});
+    final result = raw ?? const <dynamic, dynamic>{};
+    return EsptoolResult(
+      success: result['success'] == true,
+      output: result['output']?.toString() ?? '',
+      cancelled: result['cancelled'] == true,
+    );
+  }
+
+  Future<EsptoolResult> flashPaperS3Native({
+    required String deviceName,
+    required File firmware,
+    required int flashOffset,
+    int baudRate = 921600,
+    bool reboot = true,
+  }) async {
+    final raw = await _channel.invokeMethod<Map<dynamic, dynamic>>(
+      'flashPaperS3Native',
+      {
+        'deviceName': deviceName,
+        'firmwarePath': firmware.path,
+        'flashOffset': flashOffset,
+        'baudRate': baudRate,
+        'reboot': reboot,
+      },
+    );
     final result = raw ?? const <dynamic, dynamic>{};
     return EsptoolResult(
       success: result['success'] == true,

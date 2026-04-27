@@ -26,6 +26,7 @@ class MainActivity : FlutterActivity() {
         channel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "runEsptool" -> runEsptool(call, result)
+                "flashPaperS3Native" -> flashPaperS3Native(call, result)
                 "cancelEsptool" -> {
                     cancelRequested = true
                     result.success(null)
@@ -79,6 +80,58 @@ class MainActivity : FlutterActivity() {
         }.start()
     }
 
+    private fun flashPaperS3Native(call: MethodCall, result: MethodChannel.Result) {
+        val deviceName = call.argument<String>("deviceName")
+        val firmwarePath = call.argument<String>("firmwarePath")
+        val flashOffset = call.argument<Int>("flashOffset") ?: 0
+        val baudRate = call.argument<Int>("baudRate") ?: 921600
+        val reboot = call.argument<Boolean>("reboot") ?: true
+        if (firmwarePath.isNullOrBlank()) {
+            result.error("bad_args", "Missing firmwarePath", null)
+            return
+        }
+
+        cancelRequested = false
+        Thread {
+            try {
+                emitLog("native PaperS3 flash: device=$deviceName baud=$baudRate offset=0x${flashOffset.toString(16)}")
+                PaperS3NativeFlasher(
+                    context = this,
+                    shouldCancel = { cancelRequested },
+                    emitLog = { emitLog(it) },
+                    emitProgress = { emitPaperS3Progress(it) },
+                ).flash(
+                    deviceName = deviceName,
+                    firmwarePath = firmwarePath,
+                    flashOffset = flashOffset,
+                    baudRate = baudRate,
+                    reboot = reboot,
+                )
+                mainHandler.post {
+                    result.success(
+                        mapOf(
+                            "success" to true,
+                            "output" to "Native PaperS3 flash complete",
+                            "cancelled" to false,
+                        )
+                    )
+                }
+            } catch (error: Throwable) {
+                val details = buildNativeErrorDetails(error)
+                emitLog(details)
+                mainHandler.post {
+                    result.success(
+                        mapOf(
+                            "success" to false,
+                            "output" to details,
+                            "cancelled" to (error is InterruptedException),
+                        )
+                    )
+                }
+            }
+        }.start()
+    }
+
     private val mainHandler = Handler(Looper.getMainLooper())
 
     private fun buildNativeErrorDetails(error: Throwable): String {
@@ -96,6 +149,12 @@ class MainActivity : FlutterActivity() {
         if (text.isBlank()) return
         mainHandler.post {
             channel.invokeMethod("esptoolLog", text)
+        }
+    }
+
+    private fun emitPaperS3Progress(progress: Map<String, Any>) {
+        mainHandler.post {
+            channel.invokeMethod("paperS3Progress", progress)
         }
     }
 

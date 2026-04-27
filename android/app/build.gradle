@@ -5,8 +5,8 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
-def appVersionName = "0.3.12"
-def appVersionCode = 33
+def appVersionName = "0.3.13"
+def appVersionCode = 34
 
 android {
     namespace "vink.flasher"
@@ -57,7 +57,7 @@ android {
 chaquopy {
     defaultConfig {
         version "3.11"
-        buildPython "python3.11"
+        buildPython System.getenv("VINK_BUILD_PYTHON") ?: "python3.11"
         pip {
             install "intelhex==2.3.0"
             install "pyserial==3.5"

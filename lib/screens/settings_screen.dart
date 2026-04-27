@@ -14,7 +14,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _githubTokenController = TextEditingController();
   final _customUrlController = TextEditingController();
   final _updateService = AppUpdateService();
-  int _baudRate = 115200;
+  int _baudRate = 921600;
   String _burnMode = 'fast';
   String _flashProfile = 'papers3';
   AppUpdateInfo? _updateInfo;
@@ -41,7 +41,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       _githubTokenController.text = prefs.getString('githubToken') ?? '';
       _customUrlController.text = prefs.getString('customFirmwareUrl') ?? '';
-      _baudRate = prefs.getInt('baudRate') ?? 115200;
+      _baudRate = prefs.getInt('baudRate') ?? 921600;
       _burnMode = _normalizeBurnMode(prefs.getString('eraseOption'));
       _flashProfile = _normalizeFlashProfile(prefs.getString('flashProfile'));
     });

@@ -42,6 +42,7 @@ class EspFlasher {
   static const int spiAttachCommand = 0x0D;
   static const int eraseFlashCommand = 0xD0;
   static const int blockSize = 0x400;
+  static const int progressUpdateBytes = 64 * 1024;
   // Vink Flasher 优先烧录完整镜像：bootloader + partition + app + resources。
   // 完整镜像必须从 0x0 开始写入。
   static const int defaultFlashOffset = 0x0;
@@ -138,7 +139,7 @@ class EspFlasher {
     bool reboot = true,
   }) async* {
     final bytes = await firmware.readAsBytes();
-    final started = DateTime.now();
+    final started = Stopwatch()..start();
 
     yield FlashProgress(
       writtenBytes: 0,
@@ -181,21 +182,30 @@ class EspFlasher {
 
     var sequence = 0;
     var written = 0;
+    var lastProgressBytes = 0;
+    final chunk = Uint8List(blockSize);
     while (written < bytes.length) {
       final chunkLength = min(blockSize, bytes.length - written);
-      final chunk = Uint8List(blockSize)
-        ..setRange(0, chunkLength, bytes, written);
+      if (chunkLength < blockSize) {
+        chunk.fillRange(0, blockSize, 0);
+      }
+      chunk.setRange(0, chunkLength, bytes, written);
       await flashData(chunk, sequence);
       written += chunkLength;
       sequence++;
-      final elapsed =
-          DateTime.now().difference(started).inMilliseconds / 1000.0;
-      yield FlashProgress(
-        writtenBytes: written,
-        totalBytes: bytes.length,
-        speedBytesPerSecond: elapsed <= 0 ? 0 : written / elapsed,
-        stage: flashOffset == 0 ? '正在刷写完整镜像' : '正在刷写固件',
-      );
+
+      final shouldReport = written == bytes.length ||
+          written - lastProgressBytes >= progressUpdateBytes;
+      if (shouldReport) {
+        lastProgressBytes = written;
+        final elapsed = started.elapsedMilliseconds / 1000.0;
+        yield FlashProgress(
+          writtenBytes: written,
+          totalBytes: bytes.length,
+          speedBytesPerSecond: elapsed <= 0 ? 0 : written / elapsed,
+          stage: flashOffset == 0 ? '正在刷写完整镜像' : '正在刷写固件',
+        );
+      }
     }
 
     await flashEnd(reboot: reboot);

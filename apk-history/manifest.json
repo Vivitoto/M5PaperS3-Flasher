@@ -5,11 +5,19 @@
   "latestRelease": "https://github.com/Vivitoto/Vink-Flasher/releases/tag/latest",
   "versions": [
     {
-      "version": "0.3.4+25",
-      "apk": "vink-flasher-v0_3_4.apk",
+      "version": "0.3.5+26",
+      "apk": "vink-flasher-v0_3_5.apk",
       "status": "pending-release",
       "releasedAt": "2026-04-27",
       "recommended": true,
+      "summary": "Force ESP32-S3 USB reset mode and idle DTR/RTS control lines to improve ROM sync on Android USB Serial/JTAG."
+    },
+    {
+      "version": "0.3.4+25",
+      "apk": "vink-flasher-v0_3_4.apk",
+      "status": "archived-via-ci",
+      "releasedAt": "2026-04-27",
+      "recommended": false,
       "summary": "Fix Android USB serial tiny reads by staging data through a larger native read buffer."
     },
     {

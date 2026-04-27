@@ -49,7 +49,7 @@ class EsptoolService {
       '--baud',
       baudRate.toString(),
       '--before',
-      'default_reset',
+      'usb_reset',
       '--after',
       'hard_reset',
       'write_flash',

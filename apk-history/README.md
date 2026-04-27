@@ -9,6 +9,20 @@ APK 二进制文件不直接放在源码树里，避免 Git 仓库被大文件�
 
 ## 版本记录
 
+### v0.3.5+26 / `vink-flasher-v0_3_5.apk`
+
+发布时间：2026-04-27
+
+归档位置：
+
+- Latest: <https://github.com/Vivitoto/Vink-Flasher/releases/download/latest/vink-flasher-v0_3_5.apk>
+- History: <https://github.com/Vivitoto/Vink-Flasher/releases/download/apk-history/vink-flasher-v0_3_5.apk>
+
+更新内容：
+
+- ESP32-S3 烧录前强制使用 esptool `usb_reset`，避免默认 reset 模式在 Android USB Serial/JTAG 下同步失败。
+- Android Serial 打开/关闭时将 DTR/RTS 保持在 USB-JTAG 空闲态，并在 USB-JTAG reset 后增加短暂等待，提高 ROM bootloader sync 成功率。
+
 ### v0.3.4+25 / `vink-flasher-v0_3_4.apk`
 
 发布时间：2026-04-27

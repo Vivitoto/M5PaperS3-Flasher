@@ -140,6 +140,9 @@ class USBJTAGSerialReset(ResetStrategy):
         time.sleep(0.1)
         self._setDTR(False)
         self._setRTS(False)  # Chip out of reset
+        # Android USB host + ESP32-S3 USB Serial/JTAG can need a little more
+        # settling time before the ROM responds to the first sync packet.
+        time.sleep(0.3)
 
 
 class HardReset(ResetStrategy):

@@ -207,8 +207,11 @@ class AndroidSerial(SerialBase):
             raise ValueError("unsupported parity type: %r" % self._parity)
 
         self._port_handle.setParameters(self._baudrate, data_bits, stop_bits, parity)
-        self._port_handle.setDTR(True)
-        self._port_handle.setRTS(True)
+        # ESP32-S3 USB Serial/JTAG idle state is DTR=False, RTS=False.
+        # Starting with both asserted can leave the chip held in/near reset on
+        # some Android USB stacks before esptool gets to run its reset sequence.
+        self._port_handle.setDTR(False)
+        self._port_handle.setRTS(False)
 
     def _update_rts_state(self):
         if not self._port_handle:
@@ -222,6 +225,11 @@ class AndroidSerial(SerialBase):
 
     def close(self):
         if self._port_handle:
+            try:
+                self._port_handle.setDTR(False)
+                self._port_handle.setRTS(False)
+            except Exception:
+                pass
             self._port_handle.close()
         if self.connection:
             self.connection.close()

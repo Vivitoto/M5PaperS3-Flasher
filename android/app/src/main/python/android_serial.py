@@ -208,8 +208,11 @@ class AndroidSerial(SerialBase):
 
         self._port_handle.setParameters(self._baudrate, data_bits, stop_bits, parity)
         # ESP32-S3 USB Serial/JTAG idle state is DTR=False, RTS=False.
-        # Starting with both asserted can leave the chip held in/near reset on
-        # some Android USB stacks before esptool gets to run its reset sequence.
+        # Keep pySerial's internal state in sync with the actual Android USB
+        # control lines; esptool reset.py reads port.dtr when it emits RTS, and
+        # stale default True state can otherwise reassert DTR mid-reset.
+        self._dtr_state = False
+        self._rts_state = False
         self._port_handle.setDTR(False)
         self._port_handle.setRTS(False)
 
@@ -226,6 +229,8 @@ class AndroidSerial(SerialBase):
     def close(self):
         if self._port_handle:
             try:
+                self._dtr_state = False
+                self._rts_state = False
                 self._port_handle.setDTR(False)
                 self._port_handle.setRTS(False)
             except Exception:

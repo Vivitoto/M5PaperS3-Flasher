@@ -5,11 +5,19 @@
   "latestRelease": "https://github.com/Vivitoto/Vink-Flasher/releases/tag/latest",
   "versions": [
     {
-      "version": "0.3.5+26",
-      "apk": "vink-flasher-v0_3_5.apk",
+      "version": "0.3.6+27",
+      "apk": "vink-flasher-v0_3_6.apk",
       "status": "pending-release",
       "releasedAt": "2026-04-27",
       "recommended": true,
+      "summary": "Add selectable stable/Ink Box compatibility flashing profiles; stable mode keeps the PaperS3 0xFlash reset sequence, while compatibility mode uses Ink Box-style esptool parameters for verification."
+    },
+    {
+      "version": "0.3.5+26",
+      "apk": "vink-flasher-v0_3_5.apk",
+      "status": "archived-via-ci",
+      "releasedAt": "2026-04-27",
+      "recommended": false,
       "summary": "Force ESP32-S3 USB reset mode and idle DTR/RTS control lines to improve ROM sync on Android USB Serial/JTAG."
     },
     {

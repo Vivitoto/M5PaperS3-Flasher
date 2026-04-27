@@ -28,6 +28,7 @@ class _FlashScreenState extends State<FlashScreen> {
   final List<String> _logs = [];
   int _baudRate = 115200;
   String _burnMode = 'fast';
+  String _flashProfile = 'stable';
 
   @override
   void initState() {
@@ -47,6 +48,7 @@ class _FlashScreenState extends State<FlashScreen> {
     setState(() {
       _baudRate = prefs.getInt('baudRate') ?? 115200;
       _burnMode = _normalizeBurnMode(prefs.getString('eraseOption'));
+      _flashProfile = _normalizeFlashProfile(prefs.getString('flashProfile'));
     });
   }
 
@@ -57,7 +59,18 @@ class _FlashScreenState extends State<FlashScreen> {
     };
   }
 
+  String _normalizeFlashProfile(String? value) {
+    return switch (value) {
+      'compatible' || 'inkBox' || 'ink_box' => 'compatible',
+      _ => 'stable',
+    };
+  }
+
   String get _burnModeLabel => _burnMode == 'clean' ? '彻底烧录' : '快速烧录';
+
+  String get _flashProfileLabel => _flashProfile == 'compatible' ? '兼容模式（Ink Box 验证）' : '稳定模式（PaperS3 推荐）';
+
+  int get _effectiveBaudRate => _flashProfile == 'compatible' ? 460800 : _baudRate;
 
   String _baudRateLabel(int rate) {
     return switch (rate) {
@@ -193,13 +206,15 @@ class _FlashScreenState extends State<FlashScreen> {
     _addLog('准备烧录: ${widget.firmware.name} ${widget.firmware.version}');
     _addLog('本地文件: $path');
     _addLog('固件大小: ${await File(path).length()} bytes');
-    _addLog('烧录模式: $_burnModeLabel, offset=0x${widget.firmware.flashOffset.toRadixString(16)}');
+    _addLog('烧录逻辑: $_flashProfileLabel');
+    _addLog('写入方式: $_burnModeLabel, offset=0x${widget.firmware.flashOffset.toRadixString(16)}');
+    _addLog("烧录速度: ${_baudRateLabel(_effectiveBaudRate)}${_flashProfile == 'compatible' ? '（兼容模式固定）' : ''}");
     _addLog('打开 USB 串口: ${device.label}');
 
     try {
       // 先用 Flutter USB 层打开一次设备，触发/确认 Android USB 授权；
       // 真正烧录交给 Android 内置 Python esptool，避免 Dart 手写 ROM 协议不稳定。
-      await _flasher.connect(device, baudRate: _baudRate);
+      await _flasher.connect(device, baudRate: _effectiveBaudRate);
       await _flasher.close();
       _addLog('USB 授权已确认，切换到官方 esptool 烧录引擎');
 
@@ -219,7 +234,8 @@ class _FlashScreenState extends State<FlashScreen> {
           port: device.id,
           firmware: File(path),
           flashOffset: widget.firmware.flashOffset,
-          baudRate: _baudRate,
+          baudRate: _effectiveBaudRate,
+          flashProfile: _flashProfile,
         );
         if (!mounted) return;
         if (!result.success) {
@@ -277,7 +293,8 @@ class _FlashScreenState extends State<FlashScreen> {
                   Text('来源: ${widget.firmware.sourceLabel}'),
                   Text('本地文件: ${widget.firmware.localPath ?? '未下载'}'),
                   Text('固件类型: ${widget.firmware.flashOffset == 0 ? '完整镜像 (0x0)' : 'App 分区 (0x${widget.firmware.flashOffset.toRadixString(16)})'}'),
-                  Text('烧录模式: $_burnModeLabel'),
+                  Text('烧录逻辑: $_flashProfileLabel'),
+                  Text('写入方式: $_burnModeLabel'),
                 ],
               ),
             ),
@@ -318,7 +335,7 @@ class _FlashScreenState extends State<FlashScreen> {
                             onChanged: _busy ? null : (_) => setState(() => _selectedDevice = device),
                           ),
                         )),
-                  Text('烧录速度: ${_baudRateLabel(_baudRate)}'),
+                  Text("烧录速度: ${_baudRateLabel(_effectiveBaudRate)}${_flashProfile == 'compatible' ? '（兼容模式固定）' : ''}"),
                 ],
               ),
             ),

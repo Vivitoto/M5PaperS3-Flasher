@@ -9,6 +9,22 @@ APK 二进制文件不直接放在源码树里，避免 Git 仓库被大文件�
 
 ## 版本记录
 
+### v0.3.6+27 / `vink-flasher-v0_3_6.apk`
+
+发布时间：2026-04-27
+
+归档位置：
+
+- Latest: <https://github.com/Vivitoto/Vink-Flasher/releases/download/latest/vink-flasher-v0_3_6.apk>
+- History: <https://github.com/Vivitoto/Vink-Flasher/releases/download/apk-history/vink-flasher-v0_3_6.apk>
+
+更新内容：
+
+- 修复 Android Serial 初始化 DTR/RTS 硬件线后，pySerial 内部 `dtr/rts` 状态仍保留默认 True 导致 esptool USB-JTAG reset 序列被错误补发 DTR 的问题。
+- 参考 0xFlash v0.9.5 的 Android 烧录逻辑，将 ESP32-S3 USB-JTAG 进入下载模式的 reset 序列改为 DTR false + RTS true → DTR true + RTS false → DTR false + RTS false。
+- 新增设置页烧录逻辑选择：稳定模式默认适合 PaperS3；兼容模式按 Ink Box 参数（chip auto、default_reset、no-stub、460800）用于对照验证。
+- 关闭串口时同步清理内部 DTR/RTS 状态，避免下一轮烧录继承错误控制线状态。
+
 ### v0.3.5+26 / `vink-flasher-v0_3_5.apk`
 
 发布时间：2026-04-27

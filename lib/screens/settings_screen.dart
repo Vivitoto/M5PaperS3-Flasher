@@ -16,6 +16,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _updateService = AppUpdateService();
   int _baudRate = 115200;
   String _burnMode = 'fast';
+  String _flashProfile = 'stable';
   AppUpdateInfo? _updateInfo;
   bool _checkingUpdate = false;
   bool _downloadingUpdate = false;
@@ -42,6 +43,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _customUrlController.text = prefs.getString('customFirmwareUrl') ?? '';
       _baudRate = prefs.getInt('baudRate') ?? 115200;
       _burnMode = _normalizeBurnMode(prefs.getString('eraseOption'));
+      _flashProfile = _normalizeFlashProfile(prefs.getString('flashProfile'));
     });
   }
 
@@ -52,12 +54,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     };
   }
 
+  String _normalizeFlashProfile(String? value) {
+    return switch (value) {
+      'compatible' || 'inkBox' || 'ink_box' => 'compatible',
+      _ => 'stable',
+    };
+  }
+
   Future<void> _save() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('githubToken', _githubTokenController.text.trim());
     await prefs.setString('customFirmwareUrl', _customUrlController.text.trim());
     await prefs.setInt('baudRate', _baudRate);
     await prefs.setString('eraseOption', _burnMode);
+    await prefs.setString('flashProfile', _flashProfile);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('设置已保存')),
@@ -133,6 +143,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     };
   }
 
+  String get _flashProfileSummary => _flashProfile == 'compatible'
+      ? '兼容模式：按 Ink Box 参数验证烧录'
+      : '稳定模式：适合 PaperS3，优先解决连接同步';
+
   String get _burnModeSummary => _burnMode == 'clean' ? '彻底烧录：先清空闪存再写入' : '快速烧录：直接写入完整固件';
 
   @override
@@ -146,7 +160,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           _Section(
             title: '烧录设置',
-            subtitle: _burnModeSummary,
+            subtitle: '$_flashProfileSummary · $_burnModeSummary',
             children: [
               DropdownButtonFormField<int>(
                 value: _baudRate,
@@ -157,7 +171,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onChanged: (value) => setState(() => _baudRate = value ?? 115200),
               ),
               const SizedBox(height: 14),
-              Text('烧录模式', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+              Text('烧录逻辑', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 8),
+              _BurnModeCard(
+                selected: _flashProfile == 'stable',
+                title: '稳定模式',
+                badge: '默认',
+                description: '官方 esptool 烧录 + 0xFlash/PaperS3 reset 时序。适合 PaperS3，优先解决 Connecting 同步问题。',
+                onTap: () => setState(() => _flashProfile = 'stable'),
+              ),
+              const SizedBox(height: 8),
+              _BurnModeCard(
+                selected: _flashProfile == 'compatible',
+                title: '兼容模式',
+                description: '按 Ink Box 参数验证：chip auto、default_reset、no-stub、固定 460800。用于对照测试，不作为 PaperS3 默认推荐。',
+                onTap: () => setState(() => _flashProfile = 'compatible'),
+              ),
+              const SizedBox(height: 14),
+              Text('写入方式', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 8),
               _BurnModeCard(
                 selected: _burnMode == 'fast',

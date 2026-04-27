@@ -128,21 +128,21 @@ class USBJTAGSerialReset(ResetStrategy):
     """
 
     def reset(self):
-        self._setRTS(False)
-        self._setDTR(False)  # Idle
-        time.sleep(0.1)
-        self._setDTR(True)  # Set IO0
-        self._setRTS(False)
-        time.sleep(0.1)
-        self._setRTS(True)  # Reset. Calls inverted to go through (1,1) instead of (0,0)
+        # Android/PaperS3-friendly USB Serial/JTAG bootloader sequence.
+        # Mirrors the working 0xFlash v0.9.5 flow observed in its APK:
+        # DTR false + RTS true, wait 100 ms; DTR true + RTS false, wait
+        # 500 ms; then release both before sending ROM sync packets. The
+        # stock esptool USB-JTAG sequence can leave PaperS3 stuck at
+        # "Connecting..." on Android USB host stacks.
         self._setDTR(False)
-        self._setRTS(True)  # RTS set as Windows only propagates DTR on RTS setting
+        self._setRTS(True)
         time.sleep(0.1)
+        self._setDTR(True)
+        self._setRTS(False)
+        time.sleep(0.5)
         self._setDTR(False)
-        self._setRTS(False)  # Chip out of reset
-        # Android USB host + ESP32-S3 USB Serial/JTAG can need a little more
-        # settling time before the ROM responds to the first sync packet.
-        time.sleep(0.3)
+        self._setRTS(False)
+        time.sleep(0.1)
 
 
 class HardReset(ResetStrategy):

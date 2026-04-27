@@ -16,7 +16,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _updateService = AppUpdateService();
   int _baudRate = 115200;
   String _burnMode = 'fast';
-  String _flashProfile = 'stable';
+  String _flashProfile = 'manual';
   AppUpdateInfo? _updateInfo;
   bool _checkingUpdate = false;
   bool _downloadingUpdate = false;
@@ -56,8 +56,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   String _normalizeFlashProfile(String? value) {
     return switch (value) {
-      'compatible' || 'inkBox' || 'ink_box' => 'compatible',
-      _ => 'stable',
+      'manual' || 'official' || 'no_reset' => 'manual',
+      'auto_reset' || 'usb_reset' => 'auto_reset',
+      'ink_box' || 'inkBox' => 'ink_box',
+      // v0.3.6/v0.3.7 stored legacy profiles which still relied on
+      // automatic reset. Migrate them to the M5Stack-documented manual flow.
+      'stable' || 'compatible' => 'manual',
+      _ => 'manual',
     };
   }
 
@@ -143,9 +148,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     };
   }
 
-  String get _flashProfileSummary => _flashProfile == 'compatible'
-      ? '兼容模式：按 Ink Box 参数验证烧录'
-      : '稳定模式：适合 PaperS3，优先解决连接同步';
+  String get _flashProfileSummary => switch (_flashProfile) {
+        'ink_box' => '兼容模式：按 Ink Box 参数验证烧录',
+        'auto_reset' => '自动模式：尝试 USB-JTAG DTR/RTS 复位',
+        _ => '官方模式：按 M5Stack 文档手动进入下载模式',
+      };
 
   String get _burnModeSummary => _burnMode == 'clean' ? '彻底烧录：先清空闪存再写入' : '快速烧录：直接写入完整固件';
 
@@ -174,18 +181,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Text('烧录逻辑', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 8),
               _BurnModeCard(
-                selected: _flashProfile == 'stable',
-                title: '稳定模式',
-                badge: '默认',
-                description: '官方 esptool 烧录 + 0xFlash/PaperS3 reset 时序。适合 PaperS3，优先解决 Connecting 同步问题。',
-                onTap: () => setState(() => _flashProfile = 'stable'),
+                selected: _flashProfile == 'manual',
+                title: '官方模式',
+                badge: '推荐',
+                description: '按 M5Stack 官方文档：USB 连接后长按侧边电源键，背面红灯闪烁进入下载模式；esptool 使用 no_reset 直接同步。',
+                onTap: () => setState(() => _flashProfile = 'manual'),
               ),
               const SizedBox(height: 8),
               _BurnModeCard(
-                selected: _flashProfile == 'compatible',
+                selected: _flashProfile == 'auto_reset',
+                title: '自动模式',
+                description: '尝试通过 USB-JTAG DTR/RTS 自动进入下载模式。作为备用，不再默认推荐。',
+                onTap: () => setState(() => _flashProfile = 'auto_reset'),
+              ),
+              const SizedBox(height: 8),
+              _BurnModeCard(
+                selected: _flashProfile == 'ink_box',
                 title: '兼容模式',
-                description: '按 Ink Box 参数验证：chip auto、default_reset、no-stub、固定 460800。用于对照测试，不作为 PaperS3 默认推荐。',
-                onTap: () => setState(() => _flashProfile = 'compatible'),
+                description: '按 Ink Box 参数验证：chip auto、default_reset、no-stub、固定 460800。仅用于对照测试。',
+                onTap: () => setState(() => _flashProfile = 'ink_box'),
               ),
               const SizedBox(height: 14),
               Text('写入方式', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),

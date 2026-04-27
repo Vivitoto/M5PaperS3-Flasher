@@ -1,5 +1,6 @@
 import io
 import json
+import os
 import shlex
 import traceback
 from contextlib import redirect_stderr, redirect_stdout
@@ -132,6 +133,41 @@ def _normalize_exit_code(code):
     return 1
 
 
+def _arg_value(argv, name):
+    try:
+        index = argv.index(name)
+    except ValueError:
+        return None
+    value_index = index + 1
+    if value_index >= len(argv):
+        return None
+    return argv[value_index]
+
+
+def _is_ink_box_compat_profile(argv):
+    return (
+        _arg_value(argv, "--chip") == "auto"
+        and _arg_value(argv, "--baud") == "460800"
+        and _arg_value(argv, "--before") == "default_reset"
+        and "--no-stub" in argv
+    )
+
+
+def _set_reset_profile(argv):
+    previous = os.environ.get("VINK_USBJTAG_RESET_PROFILE")
+    os.environ["VINK_USBJTAG_RESET_PROFILE"] = (
+        "inkbox" if _is_ink_box_compat_profile(argv) else "stable"
+    )
+    return previous
+
+
+def _restore_reset_profile(previous):
+    if previous is None:
+        os.environ.pop("VINK_USBJTAG_RESET_PROFILE", None)
+    else:
+        os.environ["VINK_USBJTAG_RESET_PROFILE"] = previous
+
+
 def run_esptool(context, arguments, callback=None):
     output = io.StringIO()
     exit_code = 0
@@ -151,15 +187,19 @@ def run_esptool(context, arguments, callback=None):
         else:
             argv = [str(arg) for arg in _to_python_list(arguments)]
 
-        stream = ForwardingBuffer(output, callback)
-        with redirect_stdout(stream), redirect_stderr(stream):
-            try:
-                esptool.main(argv)
-            except SystemExit as exc:
-                exit_code = _normalize_exit_code(exc.code)
-            except EsptoolCancelled:
-                cancelled = True
-                exit_code = 1
+        previous_reset_profile = _set_reset_profile(argv)
+        try:
+            stream = ForwardingBuffer(output, callback)
+            with redirect_stdout(stream), redirect_stderr(stream):
+                try:
+                    esptool.main(argv)
+                except SystemExit as exc:
+                    exit_code = _normalize_exit_code(exc.code)
+                except EsptoolCancelled:
+                    cancelled = True
+                    exit_code = 1
+        finally:
+            _restore_reset_profile(previous_reset_profile)
     except BaseException:
         error = traceback.format_exc()
         output.write(error)

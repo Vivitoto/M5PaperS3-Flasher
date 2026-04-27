@@ -28,7 +28,7 @@ class _FlashScreenState extends State<FlashScreen> {
   final List<String> _logs = [];
   int _baudRate = 115200;
   String _burnMode = 'fast';
-  String _flashProfile = 'stable';
+  String _flashProfile = 'manual';
 
   @override
   void initState() {
@@ -61,16 +61,25 @@ class _FlashScreenState extends State<FlashScreen> {
 
   String _normalizeFlashProfile(String? value) {
     return switch (value) {
-      'compatible' || 'inkBox' || 'ink_box' => 'compatible',
-      _ => 'stable',
+      'manual' || 'official' || 'no_reset' => 'manual',
+      'auto_reset' || 'usb_reset' => 'auto_reset',
+      'ink_box' || 'inkBox' => 'ink_box',
+      // v0.3.6/v0.3.7 stored legacy profiles which still relied on
+      // automatic reset. Migrate them to the M5Stack-documented manual flow.
+      'stable' || 'compatible' => 'manual',
+      _ => 'manual',
     };
   }
 
   String get _burnModeLabel => _burnMode == 'clean' ? '彻底烧录' : '快速烧录';
 
-  String get _flashProfileLabel => _flashProfile == 'compatible' ? '兼容模式（Ink Box 验证）' : '稳定模式（PaperS3 推荐）';
+  String get _flashProfileLabel => switch (_flashProfile) {
+        'ink_box' => '兼容模式（Ink Box 验证）',
+        'auto_reset' => '自动模式（USB-JTAG reset 备用）',
+        _ => '官方模式（M5Stack 文档推荐）',
+      };
 
-  int get _effectiveBaudRate => _flashProfile == 'compatible' ? 460800 : _baudRate;
+  int get _effectiveBaudRate => _flashProfile == 'ink_box' ? 460800 : _baudRate;
 
   String _baudRateLabel(int rate) {
     return switch (rate) {
@@ -103,6 +112,30 @@ class _FlashScreenState extends State<FlashScreen> {
       _addLog(line.length > 300 ? '${line.substring(0, 300)}…' : line);
       _updateProgressFromEsptoolLine(line);
     }
+  }
+
+  Future<bool> _confirmPaperS3DownloadMode() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('进入 PaperS3 下载模式'),
+        content: const Text(
+          '请保持 USB-C OTG 已连接，然后长按 PaperS3 侧边电源键，直到背面状态灯红色闪烁。\n\n红灯闪烁后，再点“已进入下载模式”开始烧录。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('已进入下载模式'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
   }
 
   void _updateProgressFromEsptoolLine(String line) {
@@ -208,7 +241,7 @@ class _FlashScreenState extends State<FlashScreen> {
     _addLog('固件大小: ${await File(path).length()} bytes');
     _addLog('烧录逻辑: $_flashProfileLabel');
     _addLog('写入方式: $_burnModeLabel, offset=0x${widget.firmware.flashOffset.toRadixString(16)}');
-    _addLog("烧录速度: ${_baudRateLabel(_effectiveBaudRate)}${_flashProfile == 'compatible' ? '（兼容模式固定）' : ''}");
+    _addLog("烧录速度: ${_baudRateLabel(_effectiveBaudRate)}${_flashProfile == 'ink_box' ? '（兼容模式固定）' : ''}");
     _addLog('打开 USB 串口: ${device.label}');
 
     try {
@@ -217,6 +250,18 @@ class _FlashScreenState extends State<FlashScreen> {
       await _flasher.connect(device, baudRate: _effectiveBaudRate);
       await _flasher.close();
       _addLog('USB 授权已确认，切换到官方 esptool 烧录引擎');
+
+      if (_flashProfile == 'manual') {
+        setState(() => _status = '请按 M5Stack 官方方式进入下载模式：长按侧边电源键直到背面红灯闪烁');
+        _addLog('官方模式: 等待用户长按电源键进入 PaperS3 下载模式（背面红灯闪烁）');
+        final ready = await _confirmPaperS3DownloadMode();
+        if (!ready) {
+          setState(() => _status = '已取消烧录');
+          _addLog('用户取消：未开始 esptool 烧录');
+          return;
+        }
+        _addLog('用户确认已进入下载模式，esptool 将使用 --before no_reset 直接同步');
+      }
 
       setState(() {
         _status = '正在启动官方 esptool 烧录引擎';
@@ -335,7 +380,7 @@ class _FlashScreenState extends State<FlashScreen> {
                             onChanged: _busy ? null : (_) => setState(() => _selectedDevice = device),
                           ),
                         )),
-                  Text("烧录速度: ${_baudRateLabel(_effectiveBaudRate)}${_flashProfile == 'compatible' ? '（兼容模式固定）' : ''}"),
+                  Text("烧录速度: ${_baudRateLabel(_effectiveBaudRate)}${_flashProfile == 'ink_box' ? '（兼容模式固定）' : ''}"),
                 ],
               ),
             ),
@@ -411,7 +456,7 @@ class _FlashScreenState extends State<FlashScreen> {
           ),
           const SizedBox(height: 8),
           const Text(
-            '提示: 通过 USB-C OTG 连接目标设备。首次连接时系统可能会询问 USB 权限，请选择允许；如果没有弹窗但能看到设备，通常表示已授权。若一直卡在连接引导模式，请按住 BOOT/下载键后重置或重新插入 USB。',
+            '提示: PaperS3 官方下载模式是 USB 连接后长按侧边电源键，直到背面状态灯红色闪烁。推荐使用“官方模式”；若一直卡在 Connecting，请确认红灯正在闪烁后再点确认。',
             style: TextStyle(color: Colors.white54),
           ),
         ],

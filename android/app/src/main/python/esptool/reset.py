@@ -128,6 +128,23 @@ class USBJTAGSerialReset(ResetStrategy):
     """
 
     def reset(self):
+        if os.environ.get("VINK_USBJTAG_RESET_PROFILE") == "inkbox":
+            # Stock esptool 4.8.1 USB-JTAG reset sequence, used by the
+            # Ink Box compatibility profile for exact A/B verification.
+            self._setRTS(False)
+            self._setDTR(False)  # Idle
+            time.sleep(0.1)
+            self._setDTR(True)  # Set IO0
+            self._setRTS(False)
+            time.sleep(0.1)
+            self._setRTS(True)  # Reset. Calls inverted to go through (1,1) instead of (0,0)
+            self._setDTR(False)
+            self._setRTS(True)  # RTS set as Windows only propagates DTR on RTS setting
+            time.sleep(0.1)
+            self._setDTR(False)
+            self._setRTS(False)  # Chip out of reset
+            return
+
         # Android/PaperS3-friendly USB Serial/JTAG bootloader sequence.
         # Mirrors the working 0xFlash v0.9.5 flow observed in its APK:
         # DTR false + RTS true, wait 100 ms; DTR true + RTS false, wait

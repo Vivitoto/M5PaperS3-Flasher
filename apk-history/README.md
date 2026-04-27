@@ -9,6 +9,23 @@ APK 二进制文件不直接放在源码树里，避免 Git 仓库被大文件�
 
 ## 版本记录
 
+### v0.3.8+29 / `vink-flasher-v0_3_8.apk`
+
+发布时间：2026-04-27
+
+归档位置：
+
+- Latest: <https://github.com/Vivitoto/Vink-Flasher/releases/download/latest/vink-flasher-v0_3_8.apk>
+- History: <https://github.com/Vivitoto/Vink-Flasher/releases/download/apk-history/vink-flasher-v0_3_8.apk>
+
+更新内容：
+
+- 新增并默认推荐“官方模式”：按 M5Stack PaperS3 官方文档，USB 连接后长按侧边电源键，直到背面红灯闪烁进入下载模式。
+- 官方模式烧录时使用 `--before no_reset`，避免 Android 端 DTR/RTS 自动复位时序继续影响 PaperS3 ROM sync。
+- 烧录前增加确认弹窗，等用户确认红灯闪烁后再启动官方 esptool。
+- 修正兼容模式：真正使用 Ink Box / esptool 4.8.1 原版 USB-JTAG reset 序列，避免继续走自动模式的 reset patch。
+- 保留自动模式和 Ink Box 兼容模式作为备用/对照测试。
+
 ### v0.3.6+27 / `vink-flasher-v0_3_6.apk`
 
 发布时间：2026-04-27

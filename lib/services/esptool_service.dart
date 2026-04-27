@@ -40,53 +40,80 @@ class EsptoolService {
     required int flashOffset,
     int baudRate = 115200,
     String flashSize = '16MB',
-    String flashProfile = 'stable',
+    String flashProfile = 'manual',
   }) async {
     final offset = flashOffset == 0 ? '0x0' : '0x${flashOffset.toRadixString(16)}';
-    final args = flashProfile == 'compatible'
-        ? <String>[
-            // Ink Box compatibility profile: keep the official esptool flow,
-            // default reset, no stub, compressed write and 460800 baud for A/B
-            // verification against Ink Box behavior.
-            '--chip',
-            'auto',
-            '--port',
-            port,
-            '--baud',
-            '460800',
-            '--before',
-            'default_reset',
-            '--after',
-            'hard_reset',
-            '--no-stub',
-            'write_flash',
-            '-z',
-            offset,
-            firmware.path,
-          ]
-        : <String>[
-            // Stable PaperS3 profile: official esptool write path with the
-            // patched Android/PaperS3 USB-JTAG reset sequence.
-            '--chip',
-            'esp32s3',
-            '--port',
-            port,
-            '--baud',
-            baudRate.toString(),
-            '--before',
-            'usb_reset',
-            '--after',
-            'hard_reset',
-            'write_flash',
-            '--flash_size',
-            flashSize,
-            '--flash_mode',
-            'dio',
-            '--flash_freq',
-            '80m',
-            offset,
-            firmware.path,
-          ];
+    final args = switch (flashProfile) {
+      'ink_box' || 'compatible' => <String>[
+          // Ink Box compatibility profile: keep the official esptool flow,
+          // default reset, no stub, compressed write and 460800 baud for A/B
+          // verification against Ink Box behavior.
+          '--chip',
+          'auto',
+          '--port',
+          port,
+          '--baud',
+          '460800',
+          '--before',
+          'default_reset',
+          '--after',
+          'hard_reset',
+          '--no-stub',
+          'write_flash',
+          '-z',
+          offset,
+          firmware.path,
+        ],
+      'auto_reset' || 'stable' => <String>[
+          // Experimental auto-reset profile: official esptool write path with
+          // the patched Android/PaperS3 USB-JTAG reset sequence. Kept as a
+          // fallback, but not the default because M5Stack documents PaperS3
+          // download mode as a manual long-press flow.
+          '--chip',
+          'esp32s3',
+          '--port',
+          port,
+          '--baud',
+          baudRate.toString(),
+          '--before',
+          'usb_reset',
+          '--after',
+          'hard_reset',
+          'write_flash',
+          '--flash_size',
+          flashSize,
+          '--flash_mode',
+          'dio',
+          '--flash_freq',
+          '80m',
+          offset,
+          firmware.path,
+        ],
+      _ => <String>[
+          // M5Stack official PaperS3 flow: user enters download mode manually
+          // by long-pressing the side power button until the rear status LED
+          // flashes red, then esptool connects without toggling DTR/RTS.
+          '--chip',
+          'esp32s3',
+          '--port',
+          port,
+          '--baud',
+          baudRate.toString(),
+          '--before',
+          'no_reset',
+          '--after',
+          'hard_reset',
+          'write_flash',
+          '--flash_size',
+          flashSize,
+          '--flash_mode',
+          'dio',
+          '--flash_freq',
+          '80m',
+          offset,
+          firmware.path,
+        ],
+    };
 
     final raw = await _channel.invokeMethod<Map<dynamic, dynamic>>('runEsptool', {'args': args});
     final result = raw ?? const <dynamic, dynamic>{};

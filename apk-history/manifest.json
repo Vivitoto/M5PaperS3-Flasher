@@ -5,11 +5,19 @@
   "latestRelease": "https://github.com/Vivitoto/Vink-Flasher/releases/tag/latest",
   "versions": [
     {
-      "version": "0.3.6+27",
-      "apk": "vink-flasher-v0_3_6.apk",
+      "version": "0.3.8+29",
+      "apk": "vink-flasher-v0_3_8.apk",
       "status": "pending-release",
       "releasedAt": "2026-04-27",
       "recommended": true,
+      "summary": "Add M5Stack official PaperS3 manual download-mode flashing profile using esptool --before no_reset, with in-app red LED confirmation before connecting; keep the Ink Box stock reset compatibility fix."
+    },
+    {
+      "version": "0.3.6+27",
+      "apk": "vink-flasher-v0_3_6.apk",
+      "status": "archived-via-ci",
+      "releasedAt": "2026-04-27",
+      "recommended": false,
       "summary": "Add selectable stable/Ink Box compatibility flashing profiles; stable mode keeps the PaperS3 0xFlash reset sequence, while compatibility mode uses Ink Box-style esptool parameters for verification."
     },
     {

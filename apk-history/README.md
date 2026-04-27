@@ -9,6 +9,23 @@ APK 二进制文件不直接放在源码树里，避免 Git 仓库被大文件�
 
 ## 版本记录
 
+### v0.3.15+36 / `vink-flasher-v0_3_15.apk`
+
+发布时间：2026-04-27
+
+归档位置：
+
+- Latest: <https://github.com/Vivitoto/Vink-Flasher/releases/download/latest/vink-flasher-v0_3_15.apk>
+- History: <https://github.com/Vivitoto/Vink-Flasher/releases/download/apk-history/vink-flasher-v0_3_15.apk>
+
+更新内容：
+
+- 底部导航新增“本地/烧录”同级 Tab，将远端固件浏览/下载与本地固件管理/烧录入口分离。
+- 固件页保留最新版与历史版本下载入口；本地/烧录页集中展示已下载或未完成下载的固件版本。
+- 每个本地固件版本可继续下载、重新下载、删除本地文件，并指定该版本进入烧录。
+- App 自更新 APK 改为保存到系统 Downloads，避免长期占用应用缓存/临时目录。
+- 保留 PaperS3 Android 原生 0xFlash 兼容烧录后端和 921600 默认高速烧录设置。
+
 ### v0.3.8+29 / `vink-flasher-v0_3_8.apk`
 
 发布时间：2026-04-27

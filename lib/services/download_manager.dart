@@ -172,9 +172,23 @@ class DownloadManager {
     );
   }
 
+  Future<void> delete(Firmware firmware) async {
+    final file = await _targetFile(firmware);
+    final tempFile = File('${file.path}.part');
+    if (await file.exists()) await file.delete();
+    if (await tempFile.exists()) await tempFile.delete();
+  }
+
   Future<File> _targetFile(Firmware firmware) async {
-    final directory = await getTemporaryDirectory();
-    final safeName = '${firmware.id.replaceAll(RegExp(r'[^a-zA-Z0-9_.-]'), '_')}.bin';
+    // 固件不要放临时目录：系统可能清理，用户也无法明确管理。
+    // 统一放到 app 文档目录下的 firmwares/，并在固件页提供删除入口。
+    final base = await getApplicationDocumentsDirectory();
+    final directory = Directory('${base.path}/firmwares');
+    if (!await directory.exists()) await directory.create(recursive: true);
+    final assetName = Uri.tryParse(firmware.downloadUrl)?.pathSegments.last;
+    final fallback = '${firmware.id.replaceAll(RegExp(r'[^a-zA-Z0-9_.-]'), '_')}.bin';
+    final safeName = (assetName == null || assetName.isEmpty ? fallback : assetName)
+        .replaceAll(RegExp(r'[^a-zA-Z0-9_.-]'), '_');
     return File('${directory.path}/$safeName');
   }
 

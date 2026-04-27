@@ -1,7 +1,14 @@
 package vink.flasher
 
+import android.content.ContentValues
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.provider.MediaStore
+import androidx.core.content.FileProvider
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
 import io.flutter.embedding.android.FlutterActivity
@@ -10,10 +17,16 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import org.json.JSONObject
 import com.chaquo.python.PyException
+import java.io.File
+import java.io.FileOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
 
 class MainActivity : FlutterActivity() {
     private val channelName = "vink.flasher/esptool"
+    private val updateChannelName = "vink.flasher/app_update"
     private lateinit var channel: MethodChannel
+    private lateinit var updateChannel: MethodChannel
     @Volatile private var cancelRequested = false
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -33,6 +46,144 @@ class MainActivity : FlutterActivity() {
                 }
                 else -> result.notImplemented()
             }
+        }
+
+        updateChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, updateChannelName)
+        updateChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "downloadApkToDownloads" -> downloadApkToDownloads(call, result)
+                "installApk" -> installApk(call, result)
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+
+    private fun downloadApkToDownloads(call: MethodCall, result: MethodChannel.Result) {
+        val url = call.argument<String>("url")
+        val rawName = call.argument<String>("name") ?: "vink-flasher-update.apk"
+        val expectedSize = call.argument<Number>("size")?.toLong()
+        if (url.isNullOrBlank()) {
+            result.error("bad_args", "Missing apk url", null)
+            return
+        }
+        val name = rawName.replace(Regex("[^A-Za-z0-9._-]"), "_")
+
+        Thread {
+            try {
+                val downloaded = writeApkToPublicDownloads(url, name, expectedSize)
+                mainHandler.post { result.success(downloaded) }
+            } catch (error: Throwable) {
+                val details = buildNativeErrorDetails(error)
+                mainHandler.post { result.error("download_failed", details, null) }
+            }
+        }.start()
+    }
+
+    private fun writeApkToPublicDownloads(url: String, name: String, expectedSize: Long?): Map<String, Any?> {
+        val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+            instanceFollowRedirects = true
+            connectTimeout = 30_000
+            readTimeout = 30_000
+            requestMethod = "GET"
+        }
+        val total = expectedSize ?: connection.contentLengthLong.takeIf { it > 0 }
+        if (connection.responseCode !in 200..299) {
+            throw IllegalStateException("APK download failed: HTTP ${connection.responseCode}")
+        }
+
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            writeApkToMediaStore(connection, name, total)
+        } else {
+            writeApkToLegacyDownloads(connection, name, total)
+        }
+    }
+
+    private fun writeApkToMediaStore(connection: HttpURLConnection, name: String, total: Long?): Map<String, Any?> {
+        val resolver = contentResolver
+        val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+        resolver.query(
+            collection,
+            arrayOf(MediaStore.Downloads._ID),
+            "${MediaStore.Downloads.DISPLAY_NAME}=?",
+            arrayOf(name),
+            null,
+        )?.use { cursor ->
+            while (cursor.moveToNext()) {
+                val id = cursor.getLong(0)
+                resolver.delete(Uri.withAppendedPath(collection, id.toString()), null, null)
+            }
+        }
+
+        val values = ContentValues().apply {
+            put(MediaStore.Downloads.DISPLAY_NAME, name)
+            put(MediaStore.Downloads.MIME_TYPE, "application/vnd.android.package-archive")
+            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            put(MediaStore.Downloads.IS_PENDING, 1)
+        }
+        val uri = resolver.insert(collection, values)
+            ?: throw IllegalStateException("Unable to create APK in system Downloads")
+        try {
+            resolver.openOutputStream(uri, "w")?.use { output ->
+                streamHttpToOutput(connection, output, total)
+            } ?: throw IllegalStateException("Unable to open Downloads output stream")
+            val done = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
+            resolver.update(uri, done, null, null)
+            return mapOf("uri" to uri.toString(), "path" to null)
+        } catch (error: Throwable) {
+            resolver.delete(uri, null, null)
+            throw error
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun writeApkToLegacyDownloads(connection: HttpURLConnection, name: String, total: Long?): Map<String, Any?> {
+        val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        if (!dir.exists()) dir.mkdirs()
+        val file = File(dir, name)
+        if (file.exists()) file.delete()
+        FileOutputStream(file).use { output -> streamHttpToOutput(connection, output, total) }
+        connection.disconnect()
+        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+        return mapOf("uri" to uri.toString(), "path" to file.absolutePath)
+    }
+
+    private fun streamHttpToOutput(connection: HttpURLConnection, output: java.io.OutputStream, total: Long?) {
+        val buffer = ByteArray(128 * 1024)
+        var received = 0L
+        connection.inputStream.use { input ->
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                output.write(buffer, 0, read)
+                received += read.toLong()
+                emitApkProgress(received, total)
+            }
+        }
+        output.flush()
+        if (total != null && total > 0 && received != total) {
+            throw IllegalStateException("APK size mismatch: expected $total bytes, got $received bytes")
+        }
+    }
+
+    private fun installApk(call: MethodCall, result: MethodChannel.Result) {
+        val uriText = call.argument<String>("uri")
+        if (uriText.isNullOrBlank()) {
+            result.error("bad_args", "Missing APK uri", null)
+            return
+        }
+        try {
+            val uri = Uri.parse(uriText)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(intent)
+            result.success(null)
+        } catch (error: Throwable) {
+            result.error("install_failed", error.message, null)
         }
     }
 
@@ -155,6 +306,18 @@ class MainActivity : FlutterActivity() {
     private fun emitPaperS3Progress(progress: Map<String, Any>) {
         mainHandler.post {
             channel.invokeMethod("paperS3Progress", progress)
+        }
+    }
+
+    private fun emitApkProgress(receivedBytes: Long, totalBytes: Long?) {
+        mainHandler.post {
+            updateChannel.invokeMethod(
+                "apkDownloadProgress",
+                mapOf(
+                    "receivedBytes" to receivedBytes,
+                    "totalBytes" to totalBytes,
+                )
+            )
         }
     }
 

@@ -67,7 +67,8 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
       }
     });
     try {
-      await for (final progress in _downloadManager.download(firmware, force: force)) {
+      await for (final progress
+          in _downloadManager.download(firmware, force: force)) {
         if (!mounted) return;
         setState(() {
           _downloadProgress[firmware.id] = progress.fraction;
@@ -103,6 +104,40 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
     }
   }
 
+  Future<void> _deleteLocal(Firmware firmware) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('删除本地固件？'),
+        content:
+            Text('将删除 ${firmware.name} ${firmware.version} 的本地文件，之后可重新下载。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await _downloadManager.delete(firmware);
+    final info = await _downloadManager.localInfo(firmware);
+    if (!mounted) return;
+    setState(() {
+      _downloadProgress.remove(firmware.id);
+      _localPaths.remove(firmware.id);
+      _partialBytes.remove(firmware.id);
+      _localStatus[firmware.id] = info.status;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('本地固件已删除')),
+    );
+  }
+
   void _openFlash(Firmware firmware) {
     final localPath = _localPaths[firmware.id];
     Navigator.of(context).push(
@@ -115,7 +150,8 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
   }
 
   String _deviceIdOf(Firmware firmware) {
-    final text = '${firmware.id} ${firmware.name} ${firmware.description}'.toLowerCase();
+    final text =
+        '${firmware.id} ${firmware.name} ${firmware.description}'.toLowerCase();
     if (text.contains('papers3') || text.contains('paper s3')) return 'papers3';
     return 'other';
   }
@@ -123,8 +159,10 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
   List<_DeviceFilter> _deviceFilters(List<Firmware> firmwares) {
     final ids = firmwares.map(_deviceIdOf).toSet();
     return [
-      if (ids.contains('papers3')) const _DeviceFilter(id: 'papers3', label: 'M5Stack Paper S3'),
-      if (ids.contains('other')) const _DeviceFilter(id: 'other', label: '其他设备'),
+      if (ids.contains('papers3'))
+        const _DeviceFilter(id: 'papers3', label: 'M5Stack Paper S3'),
+      if (ids.contains('other'))
+        const _DeviceFilter(id: 'other', label: '其他设备'),
     ];
   }
 
@@ -134,7 +172,8 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
       appBar: AppBar(
         title: const Text('固件'),
         actions: [
-          IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh_rounded)),
+          IconButton(
+              onPressed: _refresh, icon: const Icon(Icons.refresh_rounded)),
         ],
       ),
       body: FutureBuilder<List<Firmware>>(
@@ -148,10 +187,13 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
           }
           final firmwares = snapshot.data ?? const <Firmware>[];
           final filters = _deviceFilters(firmwares);
-          if (filters.isNotEmpty && !filters.any((item) => item.id == _selectedDevice)) {
+          if (filters.isNotEmpty &&
+              !filters.any((item) => item.id == _selectedDevice)) {
             _selectedDevice = filters.first.id;
           }
-          final filtered = firmwares.where((firmware) => _deviceIdOf(firmware) == _selectedDevice).toList();
+          final filtered = firmwares
+              .where((firmware) => _deviceIdOf(firmware) == _selectedDevice)
+              .toList();
 
           return RefreshIndicator(
             onRefresh: _refresh,
@@ -180,16 +222,24 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
                 else
                   FirmwareCard(
                     firmwares: filtered,
-                    isDownloading: (firmware) => _downloadProgress.containsKey(firmware.id),
-                    downloadProgress: (firmware) => _downloadProgress[firmware.id],
-                    localStatus: (firmware) => _localStatus[firmware.id] ?? LocalFirmwareStatus.none,
+                    isDownloading: (firmware) =>
+                        _downloadProgress.containsKey(firmware.id),
+                    downloadProgress: (firmware) =>
+                        _downloadProgress[firmware.id],
+                    localStatus: (firmware) =>
+                        _localStatus[firmware.id] ?? LocalFirmwareStatus.none,
                     partialBytes: (firmware) => _partialBytes[firmware.id],
+                    showDeleteAction: false,
+                    showFlashAction: false,
                     onDownload: _download,
+                    onDelete: _deleteLocal,
                     onFlash: (firmware) async {
-                      if (_localPaths[firmware.id] == null && firmware.localPath == null) {
+                      if (_localPaths[firmware.id] == null &&
+                          firmware.localPath == null) {
                         await _download(firmware);
                       }
-                      if (mounted && _localPaths[firmware.id] != null) _openFlash(firmware);
+                      if (mounted && _localPaths[firmware.id] != null)
+                        _openFlash(firmware);
                     },
                   ),
               ],

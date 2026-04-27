@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -28,13 +29,29 @@ class AppUpdateInfo {
   final int? apkSize;
 }
 
+class DownloadedApk {
+  const DownloadedApk({
+    required this.name,
+    required this.uri,
+    this.path,
+  });
+
+  final String name;
+  final String uri;
+  final String? path;
+}
+
 class AppUpdateService {
-  AppUpdateService({http.Client? client}) : _client = client ?? http.Client();
+  AppUpdateService({http.Client? client}) : _client = client ?? http.Client() {
+    _channel.setMethodCallHandler(_handleNativeCall);
+  }
 
   static const _latestReleaseApi =
       'https://api.github.com/repos/Vivitoto/Vink-Flasher/releases/tags/latest';
+  static const MethodChannel _channel = MethodChannel('vink.flasher/app_update');
 
   final http.Client _client;
+  void Function(int received, int? total)? _nativeProgress;
 
   Future<AppUpdateInfo> checkLatest() async {
     final packageInfo = await PackageInfo.fromPlatform();
@@ -73,11 +90,73 @@ class AppUpdateService {
     );
   }
 
-  Future<File> downloadApk(
+  Future<DownloadedApk> downloadApk(
     AppUpdateInfo update, {
     required void Function(int received, int? total) onProgress,
   }) async {
-    final directory = await getTemporaryDirectory();
+    if (Platform.isAndroid) {
+      try {
+        _nativeProgress = onProgress;
+        final raw = await _channel.invokeMethod<Map<dynamic, dynamic>>(
+          'downloadApkToDownloads',
+          {
+            'url': update.apkUrl,
+            'name': update.apkName,
+            'size': update.apkSize,
+          },
+        );
+        final result = raw ?? const <dynamic, dynamic>{};
+        final uri = result['uri']?.toString() ?? '';
+        if (uri.isEmpty) throw Exception('系统下载目录没有返回安装 URI');
+        return DownloadedApk(
+          name: update.apkName,
+          uri: uri,
+          path: result['path']?.toString(),
+        );
+      } finally {
+        _nativeProgress = null;
+      }
+    }
+
+    final file = await _downloadApkToFallbackDirectory(update, onProgress: onProgress);
+    return DownloadedApk(name: update.apkName, uri: file.uri.toString(), path: file.path);
+  }
+
+  Future<void> installApk(DownloadedApk apk) async {
+    if (Platform.isAndroid) {
+      await _channel.invokeMethod<void>('installApk', {'uri': apk.uri});
+      return;
+    }
+
+    final path = apk.path;
+    if (path == null || path.isEmpty) throw Exception('无法打开安装器: APK 路径为空');
+    final result = await OpenFilex.open(
+      path,
+      type: 'application/vnd.android.package-archive',
+    );
+    if (result.type != ResultType.done) {
+      throw Exception('无法打开安装器: ${result.message}');
+    }
+  }
+
+  Future<void> _handleNativeCall(MethodCall call) async {
+    if (call.method == 'apkDownloadProgress') {
+      final args = call.arguments;
+      if (args is Map) {
+        _nativeProgress?.call(
+          (args['receivedBytes'] as num?)?.toInt() ?? 0,
+          (args['totalBytes'] as num?)?.toInt(),
+        );
+      }
+    }
+  }
+
+  Future<File> _downloadApkToFallbackDirectory(
+    AppUpdateInfo update, {
+    required void Function(int received, int? total) onProgress,
+  }) async {
+    final directory = await getDownloadsDirectory() ?? await getApplicationDocumentsDirectory();
+    if (!await directory.exists()) await directory.create(recursive: true);
     final file = File('${directory.path}/${update.apkName}');
     final tempFile = File('${file.path}.part');
 
@@ -134,16 +213,6 @@ class AppUpdateService {
     if (await file.exists()) await file.delete();
     await tempFile.rename(file.path);
     return file;
-  }
-
-  Future<void> installApk(File file) async {
-    final result = await OpenFilex.open(
-      file.path,
-      type: 'application/vnd.android.package-archive',
-    );
-    if (result.type != ResultType.done) {
-      throw Exception('无法打开安装器: ${result.message}');
-    }
   }
 
   Map<String, dynamic> _asMap(Object? value) {

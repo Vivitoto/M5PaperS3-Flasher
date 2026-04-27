@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'firmware_list_screen.dart';
+import 'local_firmware_screen.dart';
 import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -15,6 +16,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final _screens = const [
     FirmwareListScreen(),
+    LocalFirmwareScreen(),
     SettingsScreen(),
   ];
 
@@ -37,6 +39,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   icon: Icon(Icons.developer_board_outlined),
                   selectedIcon: Icon(Icons.developer_board),
                   label: '固件',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.folder_copy_outlined),
+                  selectedIcon: Icon(Icons.folder_copy),
+                  label: '本地/烧录',
                 ),
                 NavigationDestination(
                   icon: Icon(Icons.tune_outlined),

@@ -127,7 +127,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         },
       );
       if (!mounted) return;
-      setState(() => _updateStatus = '下载完成，正在打开安装器');
+      setState(() => _updateStatus = '已保存到系统 Downloads，正在打开安装器');
       await _updateService.installApk(apk);
     } catch (error) {
       if (!mounted) return;
@@ -318,7 +318,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                '下载完成后会打开系统安装器；如被拦截，请允许 Vink Flasher 安装未知来源应用。',
+                'APK 会保存到系统 Downloads，不再占用应用临时缓存。下载完成后会打开系统安装器；如被拦截，请允许 Vink Flasher 安装未知来源应用。',
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: Colors.white38, height: 1.35),
               ),

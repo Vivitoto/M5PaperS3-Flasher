@@ -18,6 +18,7 @@ class _LocalFirmwareScreenState extends State<LocalFirmwareScreen> {
   late Future<List<Firmware>> _future;
   final Map<String, LocalFirmwareInfo> _localInfo = {};
   final Map<String, double?> _downloadProgress = {};
+  Object? _loadWarning;
 
   @override
   void initState() {
@@ -26,9 +27,58 @@ class _LocalFirmwareScreenState extends State<LocalFirmwareScreen> {
   }
 
   Future<List<Firmware>> _load() async {
-    final firmwares = await _repository.fetchAllFirmwares();
-    await _hydrate(firmwares);
-    return firmwares;
+    _loadWarning = null;
+
+    final localFirmwares = await _downloadManager.scanLocalFirmwares();
+    _hydrateScannedLocal(localFirmwares);
+
+    try {
+      final remoteFirmwares = await _repository.fetchAllFirmwares();
+      await _hydrate(remoteFirmwares);
+      final merged = _mergeRemoteMetadata(localFirmwares, remoteFirmwares);
+      if (merged.isNotEmpty) return merged;
+      return localFirmwares;
+    } catch (error) {
+      _loadWarning = error;
+      return localFirmwares;
+    }
+  }
+
+  void _hydrateScannedLocal(List<Firmware> firmwares) {
+    _localInfo.clear();
+    for (final firmware in firmwares) {
+      final path = firmware.localPath;
+      final size = firmware.sizeBytes ?? 0;
+      _localInfo[firmware.id] = LocalFirmwareInfo(
+        status: LocalFirmwareStatus.complete,
+        filePath: path,
+        receivedBytes: size,
+        totalBytes: size,
+      );
+    }
+  }
+
+  List<Firmware> _mergeRemoteMetadata(
+    List<Firmware> localFirmwares,
+    List<Firmware> remoteFirmwares,
+  ) {
+    if (localFirmwares.isEmpty) return const <Firmware>[];
+
+    final remoteByAsset = <String, Firmware>{};
+    for (final firmware in remoteFirmwares) {
+      final asset = Uri.tryParse(firmware.downloadUrl)?.pathSegments.last;
+      if (asset != null && asset.isNotEmpty) remoteByAsset[asset] = firmware;
+    }
+
+    return localFirmwares.map((local) {
+      final asset = Uri.tryParse(local.downloadUrl)?.pathSegments.last;
+      final remote = asset == null ? null : remoteByAsset[asset];
+      if (remote == null) return local;
+
+      final info = _localInfo.remove(local.id);
+      if (info != null) _localInfo[remote.id] = info;
+      return remote.copyWith(localPath: local.localPath);
+    }).toList();
   }
 
   Future<void> _hydrate(List<Firmware> firmwares) async {
@@ -163,6 +213,10 @@ class _LocalFirmwareScreenState extends State<LocalFirmwareScreen> {
               padding: const EdgeInsets.fromLTRB(12, 4, 12, 18),
               children: [
                 _IntroCard(localCount: localFirmwares.length),
+                if (_loadWarning != null) ...[
+                  const SizedBox(height: 8),
+                  _OfflineLocalNotice(error: _loadWarning!),
+                ],
                 const SizedBox(height: 8),
                 if (localFirmwares.isEmpty)
                   const _EmptyLocalFirmware()
@@ -235,6 +289,41 @@ class _IntroCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _OfflineLocalNotice extends StatelessWidget {
+  const _OfflineLocalNotice({required this.error});
+
+  final Object error;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1710),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF3A3018)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.wifi_off_rounded, size: 16, color: Colors.white70),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '已先加载本地固件；远端更新信息暂时不可用：$error',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: Colors.white70, height: 1.25),
+            ),
+          ),
+        ],
       ),
     );
   }

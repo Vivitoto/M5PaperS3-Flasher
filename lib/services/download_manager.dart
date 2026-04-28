@@ -179,11 +179,54 @@ class DownloadManager {
     if (await tempFile.exists()) await tempFile.delete();
   }
 
+  Future<List<Firmware>> scanLocalFirmwares() async {
+    final directory = await _firmwareDirectory();
+    if (!await directory.exists()) return const <Firmware>[];
+
+    final entries = directory
+        .listSync()
+        .whereType<File>()
+        .where((file) => file.path.toLowerCase().endsWith('.bin'))
+        .toList()
+      ..sort((a, b) => b.statSync().modified.compareTo(a.statSync().modified));
+
+    final firmwares = <Firmware>[];
+    for (final file in entries) {
+      final name = file.uri.pathSegments.isNotEmpty
+          ? file.uri.pathSegments.last
+          : file.path.split(Platform.pathSeparator).last;
+      if (name.endsWith('.part')) continue;
+      final version = RegExp(r'v\d+(?:_\d+|\.\d+)*')
+              .firstMatch(name)
+              ?.group(0)
+              ?.replaceAll('_', '.') ??
+          'local';
+      final size = await file.length();
+      firmwares.add(Firmware(
+        id: 'local-${name.hashCode}-$size',
+        name: name.contains('Vink-PaperS3') ? 'Vink-PaperS3' : name.replaceAll('.bin', ''),
+        version: version,
+        description: '本地缓存固件 · 网络不可用时仍可烧录',
+        changelog: '从本地 firmwares 目录识别。网络恢复后可刷新固件列表获取完整更新说明。',
+        downloadUrl: file.uri.toString(),
+        source: FirmwareSource.vink,
+        sizeBytes: size,
+        localPath: file.path,
+        flashOffset: name.contains('full') || name.contains('16MB') ? 0 : 65536,
+      ));
+    }
+    return firmwares;
+  }
+
+  Future<Directory> _firmwareDirectory() async {
+    final base = await getApplicationDocumentsDirectory();
+    return Directory('${base.path}/firmwares');
+  }
+
   Future<File> _targetFile(Firmware firmware) async {
     // 固件不要放临时目录：系统可能清理，用户也无法明确管理。
     // 统一放到 app 文档目录下的 firmwares/，并在固件页提供删除入口。
-    final base = await getApplicationDocumentsDirectory();
-    final directory = Directory('${base.path}/firmwares');
+    final directory = await _firmwareDirectory();
     if (!await directory.exists()) await directory.create(recursive: true);
     final assetName = Uri.tryParse(firmware.downloadUrl)?.pathSegments.last;
     final fallback = '${firmware.id.replaceAll(RegExp(r'[^a-zA-Z0-9_.-]'), '_')}.bin';

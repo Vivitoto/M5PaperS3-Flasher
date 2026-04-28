@@ -169,9 +169,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final theme = Theme.of(context);
     final updateInfo = _updateInfo;
     return Scaffold(
-      appBar: AppBar(title: const Text('设置')),
+      appBar: AppBar(toolbarHeight: 48),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(14, 0, 14, 22),
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 18),
         children: [
           _Section(
             title: '烧录设置',
@@ -187,11 +187,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onChanged: (value) =>
                     setState(() => _baudRate = value ?? 115200),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
               Text('烧录逻辑',
                   style: theme.textTheme.titleSmall
                       ?.copyWith(fontWeight: FontWeight.w800)),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               _BurnModeCard(
                 selected: _flashProfile == 'papers3',
                 title: 'PaperS3 专用模式',
@@ -200,7 +200,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     '面向 Vink-PaperS3：按 M5Stack 官方方式进入下载模式，并使用 0xFlash 兼容的 ESP ROM 烧录链路。不要用于其他 ESP32 设备。',
                 onTap: () => setState(() => _flashProfile = 'papers3'),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               _BurnModeCard(
                 selected: _flashProfile == 'generic_esptool',
                 title: '通用 esptool 模式',
@@ -209,7 +209,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     '面向 LilyGo/其他 ESP32 设备扩展：chip auto、default_reset、hard_reset，由设备配置决定固件和 offset。当前仍需对应设备 profile 后再推荐使用。',
                 onTap: () => setState(() => _flashProfile = 'generic_esptool'),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               _BurnModeCard(
                 selected: _flashProfile == 'auto_reset',
                 title: 'PaperS3 自动复位备用',
@@ -217,7 +217,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     '尝试通过 USB-JTAG DTR/RTS 自动进入下载模式。作为 PaperS3 备用，不推荐给其他设备。',
                 onTap: () => setState(() => _flashProfile = 'auto_reset'),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               _BurnModeCard(
                 selected: _flashProfile == 'ink_box',
                 title: 'Ink Box 对照模式',
@@ -225,11 +225,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     '按 Ink Box 参数验证：chip auto、default_reset、no-stub、固定 460800。仅用于对照测试。',
                 onTap: () => setState(() => _flashProfile = 'ink_box'),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
               Text('写入方式',
                   style: theme.textTheme.titleSmall
                       ?.copyWith(fontWeight: FontWeight.w800)),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               _BurnModeCard(
                 selected: _burnMode == 'fast',
                 title: '快速烧录',
@@ -237,7 +237,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 description: '不额外清空整颗闪存，直接写入完整固件。适合日常升级、重复烧录 Vink 固件。',
                 onTap: () => setState(() => _burnMode = 'fast'),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               _BurnModeCard(
                 selected: _burnMode == 'clean',
                 title: '彻底烧录',
@@ -246,7 +246,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           _Section(
             title: '固件源',
             subtitle: '自定义下载地址和 GitHub 访问',
@@ -258,7 +258,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   hintText: 'https://example.com/firmware.bin',
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 6),
               TextField(
                 controller: _githubTokenController,
                 obscureText: true,
@@ -269,7 +269,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           _Section(
             title: '应用更新',
             subtitle: updateInfo == null
@@ -280,11 +280,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Text(_updateStatus!,
                     style: theme.textTheme.bodySmall
                         ?.copyWith(color: Colors.white70)),
-                const SizedBox(height: 10),
+                const SizedBox(height: 6),
               ],
               if (_downloadingUpdate) ...[
                 LinearProgressIndicator(value: _updateProgress),
-                const SizedBox(height: 10),
+                const SizedBox(height: 6),
               ],
               Row(
                 children: [
@@ -316,15 +316,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               Text(
                 'APK 会保存到系统 Downloads，不再占用应用临时缓存。下载完成后会打开系统安装器；如被拦截，请允许 Vink Flasher 安装未知来源应用。',
                 style: theme.textTheme.bodySmall
-                    ?.copyWith(color: Colors.white38, height: 1.35),
+                    ?.copyWith(color: Colors.white38, height: 1.28),
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           FilledButton.icon(
             onPressed: _save,
             icon: const Icon(Icons.check_rounded),
@@ -352,7 +352,7 @@ class _Section extends StatelessWidget {
     final theme = Theme.of(context);
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -452,7 +452,7 @@ class _BurnModeCard extends StatelessWidget {
                   const SizedBox(height: 5),
                   Text(description,
                       style: theme.textTheme.bodySmall
-                          ?.copyWith(color: Colors.white54, height: 1.35)),
+                          ?.copyWith(color: Colors.white54, height: 1.28)),
                 ],
               ),
             ),

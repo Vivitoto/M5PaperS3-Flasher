@@ -170,7 +170,7 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('固件'),
+        toolbarHeight: 48,
         actions: [
           IconButton(
               onPressed: _refresh, icon: const Icon(Icons.refresh_rounded)),
@@ -199,7 +199,7 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
             onRefresh: _refresh,
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(14, 0, 14, 22),
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 18),
               children: [
                 if (filters.isNotEmpty) ...[
                   _DeviceFilterBar(
@@ -207,7 +207,7 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
                     selected: _selectedDevice,
                     onSelected: (id) => setState(() => _selectedDevice = id),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                 ],
                 if (firmwares.isEmpty)
                   const Padding(
@@ -271,43 +271,29 @@ class _DeviceFilterBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: const Color(0xFF151516),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFF2B2B2E)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '选择设备',
-            style: theme.textTheme.labelMedium?.copyWith(
-              color: Colors.white54,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 8),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                for (final filter in filters) ...[
-                  ChoiceChip(
-                    label: Text(filter.label),
-                    selected: selected == filter.id,
-                    onSelected: (_) => onSelected(filter.id),
-                    visualDensity: VisualDensity.compact,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  const SizedBox(width: 8),
-                ],
-              ],
-            ),
-          ),
-        ],
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (final filter in filters) ...[
+              ChoiceChip(
+                label: Text(filter.label),
+                selected: selected == filter.id,
+                onSelected: (_) => onSelected(filter.id),
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              const SizedBox(width: 8),
+            ],
+          ],
+        ),
       ),
     );
   }

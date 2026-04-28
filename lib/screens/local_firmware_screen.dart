@@ -137,7 +137,7 @@ class _LocalFirmwareScreenState extends State<LocalFirmwareScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('本地 / 烧录'),
+        toolbarHeight: 48,
         actions: [
           IconButton(
               onPressed: _refresh, icon: const Icon(Icons.refresh_rounded)),
@@ -160,10 +160,10 @@ class _LocalFirmwareScreenState extends State<LocalFirmwareScreen> {
             onRefresh: _refresh,
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(14, 0, 14, 22),
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 18),
               children: [
                 _IntroCard(localCount: localFirmwares.length),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
                 if (localFirmwares.isEmpty)
                   const _EmptyLocalFirmware()
                 else
@@ -181,7 +181,7 @@ class _LocalFirmwareScreenState extends State<LocalFirmwareScreen> {
                       onDelete: () => _delete(firmware),
                       onFlash: () => _openFlash(firmware),
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 8),
                   ],
               ],
             ),
@@ -202,19 +202,19 @@ class _IntroCard extends StatelessWidget {
     final theme = Theme.of(context);
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(12),
         child: Row(
           children: [
             Container(
-              width: 42,
-              height: 42,
+              width: 36,
+              height: 36,
               decoration: BoxDecoration(
                 color: const Color(0xFF202022),
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(14),
               ),
               child: const Icon(Icons.folder_copy_rounded),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -222,13 +222,13 @@ class _IntroCard extends StatelessWidget {
                   Text('本地固件与烧录入口',
                       style: theme.textTheme.titleMedium
                           ?.copyWith(fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 2),
                   Text(
                     localCount == 0
                         ? '先到“固件”页下载需要的版本，然后在这里统一管理和烧录。'
                         : '已缓存 $localCount 个固件版本，可删除或指定版本烧录。',
                     style: theme.textTheme.bodySmall
-                        ?.copyWith(color: Colors.white54, height: 1.3),
+                        ?.copyWith(color: Colors.white54, height: 1.25),
                   ),
                 ],
               ),
@@ -247,14 +247,14 @@ class _EmptyLocalFirmware extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(22),
+        padding: const EdgeInsets.all(18),
         child: Column(
           children: [
             const Icon(Icons.inventory_2_outlined,
-                size: 42, color: Colors.white38),
-            const SizedBox(height: 10),
+                size: 36, color: Colors.white38),
+            const SizedBox(height: 8),
             Text('暂无本地固件', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             const Text(
               '从“固件”页下载最新版或历史版本后，会出现在这里。',
               textAlign: TextAlign.center,
@@ -294,7 +294,7 @@ class _LocalFirmwareCard extends StatelessWidget {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -308,7 +308,7 @@ class _LocalFirmwareCard extends StatelessWidget {
                       Text(firmware.name,
                           style: theme.textTheme.titleMedium
                               ?.copyWith(fontWeight: FontWeight.w800)),
-                      const SizedBox(height: 3),
+                      const SizedBox(height: 2),
                       Text(firmware.version,
                           style: const TextStyle(color: Colors.white70)),
                     ],
@@ -321,7 +321,7 @@ class _LocalFirmwareCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             Wrap(
               spacing: 6,
               runSpacing: 6,
@@ -337,7 +337,7 @@ class _LocalFirmwareCard extends StatelessWidget {
                     icon: Icons.cloud_outlined, text: firmware.sourceLabel),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             _StatusLine(info: info),
             if (info.filePath != null) ...[
               const SizedBox(height: 8),
@@ -349,7 +349,7 @@ class _LocalFirmwareCard extends StatelessWidget {
                     ?.copyWith(color: Colors.white38, fontFamily: 'monospace'),
               ),
             ],
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             if (isDownloading) ...[
               LinearProgressIndicator(value: progress),
               const SizedBox(height: 8),
@@ -429,7 +429,7 @@ class _StatusLine extends StatelessWidget {
     };
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
       decoration: BoxDecoration(
         color: const Color(0xFF101011),
         borderRadius: BorderRadius.circular(14),
@@ -443,7 +443,7 @@ class _StatusLine extends StatelessWidget {
               child: Text(text,
                   style: TextStyle(
                       color: color,
-                      fontSize: 12,
+                      fontSize: 11.5,
                       fontWeight: FontWeight.w600))),
         ],
       ),
@@ -467,7 +467,7 @@ class _MetaPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: const Color(0xFF202022),
         borderRadius: BorderRadius.circular(999),
@@ -476,11 +476,11 @@ class _MetaPill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 13, color: Colors.white70),
-          const SizedBox(width: 5),
+          Icon(icon, size: 12, color: Colors.white70),
+          const SizedBox(width: 4),
           Text(text,
               style: const TextStyle(
-                  fontSize: 11,
+                  fontSize: 10.5,
                   color: Colors.white70,
                   fontWeight: FontWeight.w600)),
         ],

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/firmware.dart';
@@ -19,6 +21,7 @@ class _LocalFirmwareScreenState extends State<LocalFirmwareScreen> {
   final Map<String, LocalFirmwareInfo> _localInfo = {};
   final Map<String, double?> _downloadProgress = {};
   Object? _loadWarning;
+  int _loadGeneration = 0;
 
   @override
   void initState() {
@@ -27,20 +30,39 @@ class _LocalFirmwareScreenState extends State<LocalFirmwareScreen> {
   }
 
   Future<List<Firmware>> _load() async {
+    final generation = ++_loadGeneration;
     _loadWarning = null;
 
     final localFirmwares = await _downloadManager.scanLocalFirmwares();
     _hydrateScannedLocal(localFirmwares);
 
+    // 本地/烧录页必须离线优先：进入页面和点击烧录都不能等待远端 manifest。
+    // 远端只用于补全版本说明/Release 链接，放后台做，失败或超时只显示提示。
+    if (localFirmwares.isNotEmpty) {
+      unawaited(_mergeRemoteMetadataInBackground(generation, localFirmwares));
+    }
+
+    return localFirmwares;
+  }
+
+  Future<void> _mergeRemoteMetadataInBackground(
+    int generation,
+    List<Firmware> localFirmwares,
+  ) async {
     try {
-      final remoteFirmwares = await _repository.fetchAllFirmwares();
+      final remoteFirmwares = await _repository
+          .fetchAllFirmwares()
+          .timeout(const Duration(seconds: 4));
       await _hydrate(remoteFirmwares);
       final merged = _mergeRemoteMetadata(localFirmwares, remoteFirmwares);
-      if (merged.isNotEmpty) return merged;
-      return localFirmwares;
+      if (!mounted || generation != _loadGeneration || merged.isEmpty) return;
+      setState(() {
+        _loadWarning = null;
+        _future = Future.value(merged);
+      });
     } catch (error) {
-      _loadWarning = error;
-      return localFirmwares;
+      if (!mounted || generation != _loadGeneration) return;
+      setState(() => _loadWarning = error);
     }
   }
 

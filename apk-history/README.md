@@ -9,6 +9,21 @@ APK 二进制文件不直接放在源码树里，避免 Git 仓库被大文件�
 
 ## 版本记录
 
+### v0.3.18+39 / `vink-flasher-v0_3_18.apk`
+
+发布时间：2026-04-30
+
+归档位置：
+
+- Latest: <https://github.com/Vivitoto/Vink-Flasher/releases/download/latest/vink-flasher-v0_3_18.apk>
+- History: <https://github.com/Vivitoto/Vink-Flasher/releases/download/apk-history/vink-flasher-v0_3_18.apk>
+
+更新内容：
+
+- 修复“本地/烧录”页进入后仍等待远端固件清单导致一直转圈的问题。
+- 本地固件扫描完成后立即显示本地可烧录版本；远端清单只在后台补全版本说明/Release 链接。
+- 远端元数据刷新增加 4 秒超时，网络不可用时只显示离线提示，不阻塞烧录入口。
+
 ### v0.3.15+36 / `vink-flasher-v0_3_15.apk`
 
 发布时间：2026-04-27

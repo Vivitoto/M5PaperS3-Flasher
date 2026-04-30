@@ -17,6 +17,24 @@ class EsptoolResult {
   final bool cancelled;
 }
 
+class ProbeResult {
+  const ProbeResult({
+    required this.chipFamily,
+    required this.chipRevision,
+    required this.flashSize,
+    required this.macAddress,
+    required this.profileId,
+    required this.rawDescription,
+  });
+
+  final String chipFamily;
+  final int chipRevision;
+  final int flashSize;
+  final String macAddress;
+  final String profileId;
+  final String rawDescription;
+}
+
 class EsptoolService {
   EsptoolService._() {
     _channel.setMethodCallHandler(_handleNativeCall);
@@ -159,6 +177,59 @@ class EsptoolService {
       output: result['output']?.toString() ?? '',
       cancelled: result['cancelled'] == true,
     );
+  }
+
+  Future<EsptoolResult> flashEspNative({
+    required String deviceName,
+    required String profileId,
+    required File firmware,
+    required int flashOffset,
+    int? baudRate,
+    bool reboot = true,
+  }) async {
+    final raw = await _channel.invokeMethod<Map<dynamic, dynamic>>(
+      'flashEspNative',
+      {
+        'deviceName': deviceName,
+        'profileId': profileId,
+        'firmwarePath': firmware.path,
+        'flashOffset': flashOffset,
+        if (baudRate != null) 'baudRate': baudRate,
+        'reboot': reboot,
+      },
+    );
+    final result = raw ?? const <dynamic, dynamic>{};
+    return EsptoolResult(
+      success: result['success'] == true,
+      output: result['output']?.toString() ?? '',
+      cancelled: result['cancelled'] == true,
+    );
+  }
+
+  Future<ProbeResult?> probeEspDevice({
+    String? deviceName,
+    int baudRate = 921600,
+  }) async {
+    try {
+      final raw = await _channel.invokeMethod<Map<dynamic, dynamic>>(
+        'probeEspDevice',
+        {
+          if (deviceName != null) 'deviceName': deviceName,
+          'baudRate': baudRate,
+        },
+      );
+      if (raw == null) return null;
+      return ProbeResult(
+        chipFamily: raw['chipFamily']?.toString() ?? 'Unknown',
+        chipRevision: (raw['chipRevision'] as num?)?.toInt() ?? 0,
+        flashSize: (raw['flashSize'] as num?)?.toInt() ?? 0,
+        macAddress: raw['macAddress']?.toString() ?? '',
+        profileId: raw['profileId']?.toString() ?? '',
+        rawDescription: raw['rawDescription']?.toString() ?? '',
+      );
+    } on PlatformException {
+      return null;
+    }
   }
 
   Future<EsptoolResult> flashPaperS3Native({

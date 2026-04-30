@@ -39,6 +39,8 @@ class MainActivity : FlutterActivity() {
         channel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "runEsptool" -> runEsptool(call, result)
+                "flashEspNative" -> flashEspNative(call, result)
+                "probeEspDevice" -> probeEspDevice(call, result)
                 "flashPaperS3Native" -> flashPaperS3Native(call, result)
                 "cancelEsptool" -> {
                     cancelRequested = true
@@ -227,6 +229,94 @@ class MainActivity : FlutterActivity() {
                         )
                     )
                 }
+            }
+        }.start()
+    }
+
+    private fun flashEspNative(call: MethodCall, result: MethodChannel.Result) {
+        val deviceName = call.argument<String>("deviceName")
+        val firmwarePath = call.argument<String>("firmwarePath")
+        val flashOffset = call.argument<Int>("flashOffset") ?: 0
+        val profileId = call.argument<String>("profileId") ?: EspDeviceProfile.GENERIC_ESP32S3.name
+        val profile = EspDeviceProfile.entries.firstOrNull { it.name == profileId }
+            ?: EspDeviceProfile.GENERIC_ESP32S3
+        val baudRate = call.argument<Int>("baudRate") ?: profile.defaultBaudRate
+        val reboot = call.argument<Boolean>("reboot") ?: true
+        if (firmwarePath.isNullOrBlank()) {
+            result.error("bad_args", "Missing firmwarePath", null)
+            return
+        }
+
+        cancelRequested = false
+        Thread {
+            try {
+                emitLog("native ESP flash: profile=${profile.name} device=$deviceName baud=$baudRate offset=0x${flashOffset.toString(16)}")
+                EspNativeFlasher(
+                    context = this,
+                    shouldCancel = { cancelRequested },
+                    emitLog = { emitLog(it) },
+                    emitProgress = { emitPaperS3Progress(it) },
+                ).flash(
+                    deviceName = deviceName,
+                    profile = profile,
+                    firmwarePath = firmwarePath,
+                    flashOffset = flashOffset,
+                    baudRate = baudRate,
+                    reboot = reboot,
+                )
+                mainHandler.post {
+                    result.success(
+                        mapOf(
+                            "success" to true,
+                            "output" to "Native ESP flash complete",
+                            "cancelled" to false,
+                        )
+                    )
+                }
+            } catch (error: Throwable) {
+                val details = buildNativeErrorDetails(error)
+                emitLog(details)
+                mainHandler.post {
+                    result.success(
+                        mapOf(
+                            "success" to false,
+                            "output" to details,
+                            "cancelled" to (error is InterruptedException),
+                        )
+                    )
+                }
+            }
+        }.start()
+    }
+
+    private fun probeEspDevice(call: MethodCall, result: MethodChannel.Result) {
+        val deviceName = call.argument<String>("deviceName")
+        val baudRate = call.argument<Int>("baudRate") ?: 921600
+        cancelRequested = false
+        Thread {
+            try {
+                val info = EspNativeFlasher(
+                    context = this,
+                    shouldCancel = { cancelRequested },
+                    emitLog = { emitLog(it) },
+                    emitProgress = { emitPaperS3Progress(it) },
+                ).probeDevice(deviceName, baudRate)
+                mainHandler.post {
+                    result.success(
+                        mapOf(
+                            "chipFamily" to info.chipFamily.label,
+                            "chipRevision" to info.chipRevision,
+                            "flashSize" to info.flashSize,
+                            "macAddress" to info.macAddress,
+                            "profileId" to info.profile.name,
+                            "rawDescription" to info.rawDescription,
+                        )
+                    )
+                }
+            } catch (error: Throwable) {
+                val details = buildNativeErrorDetails(error)
+                emitLog(details)
+                mainHandler.post { result.success(null) }
             }
         }.start()
     }

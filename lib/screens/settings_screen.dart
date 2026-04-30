@@ -58,6 +58,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return switch (value) {
       'papers3' || 'manual' || 'official' || 'no_reset' => 'papers3',
       'generic_esptool' || 'generic' || 'esptool' => 'generic_esptool',
+      'lilygo_t5_47' || 'lilygo' || 't5_47' => 'lilygo_t5_47',
       'auto_reset' || 'usb_reset' => 'auto_reset',
       'ink_box' || 'inkBox' => 'ink_box',
       // v0.3.6/v0.3.7 stored legacy profiles which still relied on
@@ -155,7 +156,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   String get _flashProfileSummary => switch (_flashProfile) {
-        'generic_esptool' => '通用模式：esptool chip auto，预留给 LilyGo/其他 ESP32',
+        'generic_esptool' => '通用 ESP32-S3：Android 原生 ESP ROM 烧录链路',
+        'lilygo_t5_47' => 'LilyGo T5 4.7：Android 原生 ESP ROM 烧录链路',
         'ink_box' => '兼容模式：按 Ink Box 参数验证烧录',
         'auto_reset' => '自动模式：尝试 USB-JTAG DTR/RTS 复位',
         _ => 'PaperS3 专用模式：0xFlash 兼容烧录链路',
@@ -203,11 +205,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 6),
               _BurnModeCard(
                 selected: _flashProfile == 'generic_esptool',
-                title: '通用 esptool 模式',
-                badge: '预留',
+                title: '通用 ESP32-S3 原生模式',
+                badge: '新',
                 description:
-                    '面向 LilyGo/其他 ESP32 设备扩展：chip auto、default_reset、hard_reset，由设备配置决定固件和 offset。当前仍需对应设备 profile 后再推荐使用。',
+                    '使用 Android 原生 ESP ROM 协议烧录，默认 Generic ESP32-S3 profile，适合已进入下载模式的 ESP32-S3 设备。',
                 onTap: () => setState(() => _flashProfile = 'generic_esptool'),
+              ),
+              const SizedBox(height: 6),
+              _BurnModeCard(
+                selected: _flashProfile == 'lilygo_t5_47',
+                title: 'LilyGo T5 4.7 原生模式',
+                badge: '新',
+                description:
+                    '使用 LilyGo T5 4.7 profile 与 Android 原生 ESP ROM 烧录链路，默认完整镜像从 0x0 写入。',
+                onTap: () => setState(() => _flashProfile = 'lilygo_t5_47'),
               ),
               const SizedBox(height: 6),
               _BurnModeCard(

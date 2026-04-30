@@ -63,6 +63,7 @@ class _FlashScreenState extends State<FlashScreen> {
     return switch (value) {
       'papers3' || 'manual' || 'official' || 'no_reset' => 'papers3',
       'generic_esptool' || 'generic' || 'esptool' => 'generic_esptool',
+      'lilygo_t5_47' || 'lilygo' || 't5_47' => 'lilygo_t5_47',
       'auto_reset' || 'usb_reset' => 'auto_reset',
       'ink_box' || 'inkBox' => 'ink_box',
       // v0.3.6/v0.3.7 stored legacy profiles which still relied on
@@ -75,13 +76,22 @@ class _FlashScreenState extends State<FlashScreen> {
   String get _burnModeLabel => _burnMode == 'clean' ? '彻底烧录' : '快速烧录';
 
   String get _flashProfileLabel => switch (_flashProfile) {
-        'generic_esptool' => '通用 esptool 模式（预留）',
+        'generic_esptool' => '通用 ESP32-S3 原生模式',
+        'lilygo_t5_47' => 'LilyGo T5 4.7 原生模式',
         'ink_box' => 'Ink Box 对照模式',
         'auto_reset' => 'PaperS3 自动复位备用',
         _ => 'PaperS3 专用模式（0xFlash 兼容）',
       };
 
   int get _effectiveBaudRate => _flashProfile == 'ink_box' ? 460800 : _baudRate;
+
+  bool get _usesNativeGenericEsp =>
+      _flashProfile == 'generic_esptool' || _flashProfile == 'lilygo_t5_47';
+
+  String get _nativeEspProfileId => switch (_flashProfile) {
+        'lilygo_t5_47' => 'LILYGO_T5_47',
+        _ => 'GENERIC_ESP32S3',
+      };
 
   bool _isEspressifUsbSerialJtag(SerialDeviceInfo info) {
     final device = info.device;
@@ -331,7 +341,9 @@ class _FlashScreenState extends State<FlashScreen> {
       await _flasher.close();
       _addLog(_flashProfile == 'papers3'
           ? 'USB 授权已确认，切换到 Android 原生 PaperS3 烧录后端'
-          : 'USB 授权已确认，切换到通用 esptool 烧录引擎');
+          : _usesNativeGenericEsp
+              ? 'USB 授权已确认，切换到 Android 原生通用 ESP 烧录后端'
+              : 'USB 授权已确认，切换到通用 esptool 烧录引擎');
 
       if (_flashProfile == 'papers3') {
         setState(() {
@@ -378,29 +390,48 @@ class _FlashScreenState extends State<FlashScreen> {
         }
       } else {
         setState(() {
-          _status = '正在启动通用 esptool 烧录引擎';
+          _status = _usesNativeGenericEsp
+              ? '正在启动 Android 原生通用 ESP 烧录后端'
+              : '正在启动通用 esptool 烧录引擎';
           _progress = FlashProgress(
             writtenBytes: 0,
             totalBytes: 100,
             speedBytesPerSecond: 0,
-            stage: '启动 esptool',
+            stage: _usesNativeGenericEsp ? '启动原生 ESP 烧录后端' : '启动 esptool',
           );
         });
 
         final logSubscription =
             EsptoolService.instance.logs.listen(_handleEsptoolLog);
+        final progressSubscription = _usesNativeGenericEsp
+            ? EsptoolService.instance.paperS3Progress.listen((progress) {
+                if (!mounted) return;
+                setState(() {
+                  _progress = progress;
+                  _status = progress.stage;
+                });
+              })
+            : null;
         try {
-          final result = await EsptoolService.instance.flashFullImage(
-            port: device.id,
-            firmware: File(path),
-            flashOffset: widget.firmware.flashOffset,
-            baudRate: _effectiveBaudRate,
-            flashProfile: _flashProfile,
-          );
+          final result = _usesNativeGenericEsp
+              ? await EsptoolService.instance.flashEspNative(
+                  deviceName: device.id,
+                  profileId: _nativeEspProfileId,
+                  firmware: File(path),
+                  flashOffset: widget.firmware.flashOffset,
+                  baudRate: _effectiveBaudRate,
+                )
+              : await EsptoolService.instance.flashFullImage(
+                  port: device.id,
+                  firmware: File(path),
+                  flashOffset: widget.firmware.flashOffset,
+                  baudRate: _effectiveBaudRate,
+                  flashProfile: _flashProfile,
+                );
           if (!mounted) return;
           if (!result.success) {
             throw Exception(result.output.isEmpty
-                ? 'esptool 烧录失败'
+                ? (_usesNativeGenericEsp ? '原生 ESP 烧录失败' : 'esptool 烧录失败')
                 : result.output.split('\n').last);
           }
           setState(() {
@@ -417,6 +448,7 @@ class _FlashScreenState extends State<FlashScreen> {
             const SnackBar(content: Text('刷写完成')),
           );
         } finally {
+          await progressSubscription?.cancel();
           await logSubscription.cancel();
         }
       }

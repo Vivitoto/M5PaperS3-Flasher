@@ -1,1 +1,588 @@
-"package vink.flasher\n\nimport android.content.Context\nimport android.hardware.usb.UsbManager\nimport com.hoho.android.usbserial.driver.UsbSerialPort\nimport com.hoho.android.usbserial.driver.UsbSerialProber\nimport java.io.ByteArrayOutputStream\nimport java.io.File\nimport kotlin.math.max\nimport kotlin.math.min\n\n/**\n * Native ESP32 flashing engine for any ESP32 chip family.\n * Replaces the PaperS3-specific flasher with a generic implementation.\n *\n * Protocol reference: ESP32 ROM Serial Communication Protocol\n * https://github.com/espressif/esptool/blob/master/docs/en/esptool/serial-protocol.md\n */\nclass EspNativeFlasher(\n    private val context: Context,\n    private val shouldCancel: () -> Boolean,\n    private val emitLog: (String) -> Unit,\n    private val emitProgress: (Map<String, Any>) -> Unit,\n) {\n    private companion object {\n        // SLIP framing\n        const val SLIP_FRAME = 0xC0.toByte()\n        const val SLIP_ESC = 0xDB.toByte()\n        const val SLIP_ESC_FRAME = 0xDC.toByte()\n        const val SLIP_ESC_ESC = 0xDD.toByte()\n\n        // ESP32 download mode commands\n        const val CMD_SYNC = 0x08\n        const val CMD_FLASH_BEGIN = 0x02\n        const val CMD_FLASH_DATA = 0x03\n        const val CMD_FLASH_END = 0x04\n        const val CMD_SPI_SET_PARAMS = 0x0B\n        const val CMD_SPI_ATTACH = 0x0D\n        const val CMD_READ_FLASH_ID = 0x0F\n        const val CMD_READ_MAC = 0x0F\n        const val CMD_GET_CHIP_INFO = 0x0F\n        const val CMD_CHECKSUM = 0x10\n        const val CMD_FLASH_DEFL_BEGIN = 0x05\n        const val CMD_FLASH_DEFL_DATA = 0x06\n        const val CMD_FLASH_DEFL_END = 0x07\n\n        // ESPRESSIF USB Vendor ID\n        const val ESPRESSIF_VID = 0x303A\n\n        // USB Serial JTAG PIDs that indicate ESP32 in download mode\n        val ESP32S3_JTAG_PIDS = setOf(0x1001, 0x1002)\n        val ESP32C6_USB_PIDS = setOf(0x1001, 0x1002, 0x1003)\n        val ESP32H2_USB_PIDS = setOf(0x1001, 0x1002, 0x1003)\n\n        // Block size: 0x400 (1024) is standard for ESP32; some chips use 0x800\n        const val BLOCK_SIZE = 0x400\n        const val READ_TIMEOUT_MS = 5000\n        const val WRITE_TIMEOUT_MS = 5000\n        const val PROGRESS_BLOCK_INTERVAL = 50\n    }\n\n    private var port: UsbSerialPort? = null\n    private val rx = ArrayList<Byte>(8192)\n    private var chipFamily = ChipFamily.UNKNOWN\n\n    // \u2500\u2500\u2500 Public API \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n    /**\n     * Flash a firmware file to the connected ESP32 device.\n     *\n     * @param deviceName   USB serial port device name (e.g. /dev/bus/usb/001/002)\n     *                     Pass null for auto-detect.\n     * @param profile      Device profile with chip family and flash offset defaults.\n     * @param firmwarePath Path to the .bin file on local storage.\n     * @param flashOffset  Flash address to write to (use profile.defaultFlashOffset.bytes as default).\n     * @param baudRate     UART baud rate (use profile.defaultBaudRate as default).\n     * @param reboot       Whether to reboot the device after flashing.\n     */\n    fun flash(\n        deviceName: String?,\n        profile: EspDeviceProfile,\n        firmwarePath: String,\n        flashOffset: Int = profile.defaultFlashOffset.bytes,\n        baudRate: Int = profile.defaultBaudRate,\n        reboot: Boolean = true,\n    ) {\n        val firmware = File(firmwarePath)\n        require(firmware.exists()) { \"\u56fa\u4ef6\u6587\u4ef6\u4e0d\u5b58\u5728: $firmwarePath\" }\n        val bytes = firmware.readBytes()\n        val started = System.currentTimeMillis()\n\n        chipFamily = profile.chipFamily\n\n        openPort(deviceName, baudRate)\n        try {\n            progress(0, bytes.size, 0.0, \"\u8fde\u63a5\u82af\u7247...\")\n            enterBootloader()\n            sync()\n\n            progress(0, bytes.size, 0.0, \"\u8bfb\u53d6\u82af\u7247\u4fe1\u606f...\")\n            val chipInfo = getChipInfo()\n            emitLog(\"\u82af\u7247\u4fe1\u606f: $chipInfo\")\n\n            progress(0, bytes.size, 0.0, \"\u521d\u59cb\u5316 SPI Flash\")\n            spiAttach()\n            spiSetParams(chipInfo.flashSize)\n\n            progress(0, bytes.size, 0.0, \"\u5f00\u59cb\u5199\u5165\u56fa\u4ef6\")\n            flashBegin(bytes.size, flashOffset)\n\n            val block = ByteArray(BLOCK_SIZE)\n            val blocks = (bytes.size + BLOCK_SIZE - 1) / BLOCK_SIZE\n            var written = 0\n            for (sequence in 0 until blocks) {\n                if (shouldCancel()) throw InterruptedException(\"Flash cancelled by user\")\n                val chunkLength = min(BLOCK_SIZE, bytes.size - written)\n                block.fill(0.toByte())\n                System.arraycopy(bytes, written, block, 0, chunkLength)\n                flashData(block, sequence)\n                written += chunkLength\n\n                if (sequence % PROGRESS_BLOCK_INTERVAL == 0 || sequence == blocks - 1) {\n                    val elapsed = max(1L, System.currentTimeMillis() - started) / 1000.0\n                    val label = if (flashOffset == 0) \"\u6b63\u5728\u5237\u5199\u5b8c\u6574\u955c\u50cf\" else \"\u6b63\u5728\u5237\u5199\u56fa\u4ef6\"\n                    progress(written, bytes.size, written / elapsed, label)\n                }\n            }\n\n            flashEnd(reboot)\n            if (reboot) {\n                progress(bytes.size, bytes.size, 0.0, \"\u6b63\u5728\u91cd\u542f\u8bbe\u5907\")\n                hardReset()\n            }\n            val doneMsg = if (reboot) \"\u5b8c\u6210\u5e76\u91cd\u542f\" else \"\u5b8c\u6210\"\n            progress(bytes.size, bytes.size, 0.0, \"Done \u2014 $doneMsg\")\n            emitLog(\"Flashed ${bytes.size} bytes to offset 0x${Integer.toHexString(flashOffset)}\")\n        } finally {\n            closePort()\n        }\n    }\n\n    /**\n     * Probe a connected device and return its chip info.\n     * Call this before flash() to confirm the device is in download mode.\n     */\n    fun probeDevice(deviceName: String?, baudRate: Int = 921600): ProbedDeviceInfo {\n        openPort(deviceName, baudRate)\n        try {\n            enterBootloader()\n            sync()\n            return getChipInfo()\n        } finally {\n            closePort()\n        }\n    }\n\n    // \u2500\u2500\u2500 Port management \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n    private fun openPort(deviceName: String?, baudRate: Int) {\n        val usbManager = context.getSystemService(Context.USB_SERVICE) as UsbManager\n        val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)\n        require(drivers.isNotEmpty()) { \"\u672a\u53d1\u73b0 USB \u4e32\u53e3\u8bbe\u5907\" }\n\n        val driver = drivers.firstOrNull { it.device.deviceName == deviceName }\n            ?: drivers.firstOrNull { d ->\n                // Prefer Espressif USB JTAG devices\n                d.device.vendorId == ESPRESSIF_VID\n            }\n            ?: drivers.first()\n\n        val device = driver.device\n        require(usbManager.hasPermission(device)) {\n            \"\u6ca1\u6709 USB \u6743\u9650\uff0c\u8bf7\u5148\u5728\u7cfb\u7edf\u5f39\u7a97\u4e2d\u5141\u8bb8 Vink Flasher \u8bbf\u95ee\u8bbe\u5907\"\n        }\n        val connection = usbManager.openDevice(device)\n            ?: throw IllegalStateException(\"\u65e0\u6cd5\u6253\u5f00 USB \u8bbe\u5907: ${device.deviceName}\")\n\n        val selectedPort = driver.ports.firstOrNull()\n            ?: throw IllegalStateException(\"USB \u8bbe\u5907\u6ca1\u6709\u53ef\u7528\u4e32\u53e3: ${device.deviceName}\")\n\n        selectedPort.open(connection)\n        selectedPort.setParameters(\n            baudRate,\n            UsbSerialPort.DATABITS_8,\n            UsbSerialPort.STOPBITS_1,\n            UsbSerialPort.PARITY_NONE,\n        )\n        selectedPort.setDTR(false)\n        selectedPort.setRTS(false)\n        port = selectedPort\n        emitLog(\"USB serial opened at $baudRate baud: ${device.deviceName} (VID=${device.vendorId} PID=${device.productId})\")\n    }\n\n    private fun closePort() {\n        try {\n            port?.close()\n        } catch (_: Throwable) {\n        } finally {\n            port = null\n            rx.clear()\n        }\n    }\n\n    // \u2500\u2500\u2500 Bootloader reset \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n    /**\n     * Trigger download mode on ESP32.\n     * Sequence: RTS\u2191 \u2192 DTR\u2191 \u2192 RTS\u2193 \u2192 DTR\u2193 (for CH340/CP210x auto-baud)\n     */\n    private fun enterBootloader() {\n        val p = requirePort()\n        p.setDTR(false)\n        p.setRTS(true)\n        Thread.sleep(100)\n        p.setDTR(true)\n        p.setRTS(false)\n        Thread.sleep(500)\n        p.setDTR(false)\n        p.setRTS(false)\n        Thread.sleep(100)\n    }\n\n    private fun hardReset() {\n        val p = requirePort()\n        p.setDTR(false)\n        p.setRTS(false)\n        Thread.sleep(100)\n        p.setDTR(true)\n        Thread.sleep(100)\n        p.setDTR(false)\n        Thread.sleep(500)\n    }\n\n    // \u2500\u2500\u2500 ESP32 protocol commands \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n    private fun sync() {\n        val payload = ByteArray(36)\n        // The first 4 bytes are a \"sync\" magic; rest are 0x55\n        payload[0] = 0x07\n        payload[1] = 0x07\n        payload[2] = 0x12\n        payload[3] = 0x20\n        for (i in 4 until payload.size) payload[i] = 0x55\n\n        var lastError: Throwable? = null\n        repeat(10) { attempt ->\n            try {\n                rx.clear()\n                sendCommand(CMD_SYNC, payload)\n                readCommandResponse(CMD_SYNC, 3000, checkStatus = false)\n                rx.clear()\n                emitLog(\"SYNC OK\")\n                return\n            } catch (error: Throwable) {\n                lastError = error\n                Thread.sleep(100)\n                emitLog(\"SYNC attempt ${attempt + 1} failed: ${error.message}\")\n            }\n        }\n        throw IllegalStateException(\"ESP32 \u4e0b\u8f7d\u6a21\u5f0f\u540c\u6b65\u5931\u8d25: ${lastError?.message}\", lastError)\n    }\n\n    private fun getChipInfo(): ProbedDeviceInfo {\n        // Try the CHIP_INFO command (0x0F with different subcommand)\n        val chipData = sendWithResponse(CMD_GET_CHIP_INFO, byteArrayOf(0x00), 3000)\n        if (chipData.size >= 12) {\n            val chipType = chipData[0].toInt() and 0xFF\n            val chipRevision = chipData[1].toInt() and 0xFF\n            val numCores = chipData[2].toInt() and 0xFF\n            val cpuFreq = (chipData[3].toInt() and 0xFF) or\n                ((chipData[4].toInt() and 0xFF) shl 8)\n            val chipFamilyId = chipData[5].toInt() and 0xFF\n\n            val family = when (chipFamilyId) {\n                1 -> ChipFamily.ESP32\n                2 -> ChipFamily.ESP32S2\n                4 -> ChipFamily.ESP32S3\n                5 -> ChipFamily.ESP32C2\n                6 -> ChipFamily.ESP32C3\n                7 -> ChipFamily.ESP32C6\n                8 -> ChipFamily.ESP32H2\n                9 -> ChipFamily.ESP32P4\n                else -> ChipFamily.UNKNOWN\n            }\n            chipFamily = family\n\n            // Read MAC address\n            val macBytes = try {\n                sendWithResponse(CMD_READ_MAC, byteArrayOf(0x04), 2000)\n            } catch (_: Throwable) {\n                byteArrayOf()\n            }\n            val mac = if (macBytes.size >= 6) {\n                macBytes.take(6).joinToString(\":\") {\n                    String.format(\"%02X\", it.toInt() and 0xFF)\n                }\n            } else {\n                \"unknown\"\n            }\n\n            // Read flash ID\n            val flashSize = try {\n                val flashIdData = sendWithResponse(CMD_READ_FLASH_ID, byteArrayOf(), 2000)\n                if (flashIdData.size >= 4) {\n                    // Flash size encoded in the response (JEDEC ID)\n                    val flashId = (flashIdData[0].toInt() and 0xFF shl 16) or\n                        (flashIdData[1].toInt() and 0xFF shl 8) or\n                        (flashIdData[2].toInt() and 0xFF)\n                    // Common flash sizes: 0x14=16MB, 0x13=8MB, 0x12=4MB, 0x11=2MB\n                    when (flashIdData[2].toInt() and 0xFF) {\n                        0x14 -> 16 * 1024L * 1024L\n                        0x13 -> 8 * 1024L * 1024L\n                        0x12 -> 4 * 1024L * 1024L\n                        0x11 -> 2 * 1024L * 1024L\n                        else -> family.defaultFlashSizeBytes\n                    }\n                } else {\n                    family.defaultFlashSizeBytes\n                }\n            } catch (_: Throwable) {\n                family.defaultFlashSizeBytes\n            }\n\n            val profile = EspDeviceProfile.fromVidPid(\n                requirePort().let { port ->\n                    port.javaClass.getDeclaredField(\"device\")\n                        .apply { isAccessible = true }\n                        .let { field -> (field.get(port) as? com.hoho.android.usbserial.driver.UsbSerialDriver)?.device }\n                        ?.vendorId ?: ESPRESSIF_VID\n                },\n                requirePort().let { port ->\n                    port.javaClass.getDeclaredField(\"device\")\n                        .apply { isAccessible = true }\n                        .let { field -> (field.get(port) as? com.hoho.android.usbserial.driver.UsbSerialDriver)?.device }\n                        ?.productId ?: 0x1001\n                }\n            )\n\n            return ProbedDeviceInfo(\n                chipFamily = family,\n                chipRevision = chipRevision,\n                flashSize = flashSize,\n                macAddress = mac,\n                profile = profile,\n                rawDescription = \"ESP32 family=0x${Integer.toHexString(chipFamilyId)} \" +\n                    \"revision=$chipRevision cores=$numCores freq=${cpuFreq}MHz\",\n            )\n        }\n\n        // Fallback: probe via MAC read\n        chipFamily = ChipFamily.ESP32S3 // assume S3 if PaperS3 is common\n        return ProbedDeviceInfo(\n            chipFamily = chipFamily,\n            chipRevision = 0,\n            flashSize = chipFamily.defaultFlashSizeBytes,\n            macAddress = \"unknown\",\n            profile = EspDeviceProfile.PAPER_S3,\n            rawDescription = \"Probe fallback \u2014 assuming ESP32-S3\",\n        )\n    }\n\n    private fun spiAttach() {\n        sendCommand(CMD_SPI_ATTACH, ByteArray(8))\n        readCommandResponse(CMD_SPI_ATTACH, READ_TIMEOUT_MS, checkStatus = false)\n    }\n\n    private fun spiSetParams(flashSizeBytes: Long) {\n        val out = ByteArrayOutputStream()\n        // flash_size (4B), block_size (4B), sector_size (4B), page_size (4B), status_mask (4B)\n        out.u32(0) // starting address\n        out.u32((flashSizeBytes and 0xFFFFFFFF).toInt())\n        out.u32(0x10000) // block size = 64KB\n        out.u32(0x1000)  // sector size = 4KB\n        out.u32(0x100)   // page size = 256B\n        out.u32(0xFFFF)  // status mask\n        sendCommand(CMD_SPI_SET_PARAMS, out.toByteArray())\n        readCommandResponse(CMD_SPI_SET_PARAMS, READ_TIMEOUT_MS, checkStatus = false)\n    }\n\n    private fun flashBegin(size: Int, offset: Int) {\n        val blocks = (size + BLOCK_SIZE - 1) / BLOCK_SIZE\n        // Erase size: aligned to 4KB sectors\n        val eraseSize = ((size + 0xFFF) / 0x1000) * 0x1000\n        val out = ByteArrayOutputStream()\n        out.u32(eraseSize)\n        out.u32(blocks)\n        out.u32(BLOCK_SIZE)\n        out.u32(offset)\n        out.u32(0) // encryption flag: false\n\n        val timeoutMs = max(5000, ((eraseSize * 1000L) / 175000L).toInt() + 15000)\n        var lastError: Throwable? = null\n        repeat(3) { attempt ->\n            try {\n                rx.clear()\n                sendCommand(CMD_FLASH_BEGIN, out.toByteArray())\n                readCommandResponse(CMD_FLASH_BEGIN, timeoutMs)\n                emitLog(\"FLASH_BEGIN OK \u2014 $blocks blocks to erase=$eraseSize\")\n                return\n            } catch (error: Throwable) {\n                lastError = error\n                emitLog(\"FLASH_BEGIN attempt ${attempt + 1} failed: ${error.message}\")\n                if (attempt < 2) {\n                    drainResponses(10_000)\n                    rx.clear()\n                }\n            }\n        }\n        throw IllegalStateException(\"FLASH_BEGIN failed after 3 attempts: ${lastError?.message}\", lastError)\n    }\n\n    private fun flashData(block: ByteArray, sequence: Int) {\n        val out = ByteArrayOutputStream(BLOCK_SIZE + 16)\n        out.u32(block.size)\n        out.u32(sequence)\n        out.u32(0) // zero (data_size in SPI attach mode)\n        out.u32(0) // zero (block_size in SPI attach mode)\n        out.write(block)\n        sendCommand(CMD_FLASH_DATA, out.toByteArray(), checksum(block))\n        readCommandResponse(CMD_FLASH_DATA, READ_TIMEOUT_MS)\n    }\n\n    private fun flashEnd(reboot: Boolean) {\n        val out = ByteArrayOutputStream(4)\n        out.u32(if (reboot) 0 else 1)\n        sendCommand(CMD_FLASH_END, out.toByteArray())\n        readCommandResponse(CMD_FLASH_END, READ_TIMEOUT_MS)\n    }\n\n    // \u2500\u2500\u2500 Low-level SLIP protocol \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n    private fun sendCommand(command: Int, data: ByteArray, checksum: Int = 0) {\n        val out = ByteArrayOutputStream(data.size + 8)\n        out.write(0x00)             // direction: host\u2192device\n        out.write(command)\n        out.u16(data.size)\n        out.u32(checksum)\n        out.write(data)\n        val encoded = slipEncode(out.toByteArray())\n        requirePort().write(encoded, WRITE_TIMEOUT_MS)\n    }\n\n    private fun sendWithResponse(command: Int, data: ByteArray, timeoutMs: Int): ByteArray {\n        sendCommand(command, data)\n        return readCommandResponse(command, timeoutMs)\n    }\n\n    private fun readCommandResponse(\n        command: Int,\n        timeoutMs: Int,\n        checkStatus: Boolean = true,\n    ): ByteArray {\n        repeat(100) {\n            val packet = readSlipPacket(timeoutMs)\n            if (packet.size < 8) return@repeat\n            val response = packet[0].toInt() and 0xFF\n            val op = packet[1].toInt() and 0xFF\n            if (response != 0x01 || op != command) return@repeat\n            val dataLength = (packet[2].toInt() and 0xFF) or ((packet[3].toInt() and 0xFF) shl 8)\n            val value = (packet[4].toInt() and 0xFF) or\n                ((packet[5].toInt() and 0xFF) shl 8) or\n                ((packet[6].toInt() and 0xFF) shl 16) or\n                ((packet[7].toInt() and 0xFF) shl 24)\n            if (packet.size < 8 + dataLength) {\n                throw IllegalStateException(\n                    \"ESP32 \u54cd\u5e94\u957f\u5ea6\u5f02\u5e38: command=0x${command.toString(16)}\"\n                )\n            }\n            if (checkStatus && value != 0) {\n                throw IllegalStateException(\n                    \"ESP32 \u62d2\u7edd\u547d\u4ee4: command=0x${command.toString(16)}, value=$value\"\n                )\n            }\n            return packet.copyOfRange(8, 8 + dataLength)\n        }\n        throw java.util.concurrent.TimeoutException(\n            \"ESP32 \u672a\u54cd\u5e94\u547d\u4ee4: 0x${command.toString(16)}\"\n        )\n    }\n\n    private fun readSlipPacket(timeoutMs: Int): ByteArray {\n        val deadline = System.currentTimeMillis() + timeoutMs\n        val temp = ByteArray(4096)\n        while (System.currentTimeMillis() < deadline) {\n            val end = rx.indexOf(SLIP_FRAME)\n            if (end >= 0) {\n                val raw = rx.subList(0, end + 1).toByteArray()\n                rx.subList(0, end + 1).clear()\n                val decoded = slipDecode(raw)\n                if (decoded.isNotEmpty()) return decoded\n                continue\n            }\n            val read = requirePort().read(temp, 20)\n            if (read > 0) {\n                for (i in 0 until read) rx.add(temp[i])\n            }\n        }\n        throw java.util.concurrent.TimeoutException(\"Timed out waiting for ESP32 response\")\n    }\n\n    private fun drainResponses(durationMs: Long) {\n        val until = System.currentTimeMillis() + durationMs\n        while (System.currentTimeMillis() < until) {\n            try {\n                readSlipPacket(250)\n            } catch (_: Throwable) {\n                // keep draining\n            }\n        }\n    }\n\n    private fun slipEncode(packet: ByteArray): ByteArray {\n        val out = ByteArrayOutputStream(packet.size + 2)\n        out.write(SLIP_FRAME.toInt())\n        for (b in packet) {\n            when (b.toInt() and 0xFF) {\n                0xC0 -> {\n                    out.write(SLIP_ESC.toInt())\n                    out.write(SLIP_ESC_FRAME.toInt())\n                }\n                0xDB -> {\n                    out.write(SLIP_ESC.toInt())\n                    out.write(SLIP_ESC_ESC.toInt())\n                }\n                else -> out.write(b.toInt())\n            }\n        }\n        out.write(SLIP_FRAME.toInt())\n        return out.toByteArray()\n    }\n\n    private fun slipDecode(packet: ByteArray): ByteArray {\n        val out = ByteArrayOutputStream(packet.size)\n        var i = 0\n        while (i < packet.size) {\n            val b = packet[i].toInt() and 0xFF\n            when {\n                b == 0xC0 -> Unit\n                b == 0xDB && i + 1 < packet.size -> {\n                    val next = packet[++i].toInt() and 0xFF\n                    when (next) {\n                        0xDC -> out.write(0xC0)\n                        0xDD -> out.write(0xDB)\n                        else -> out.write(next)\n                    }\n                }\n                else -> out.write(b)\n            }\n            i++\n        }\n        return out.toByteArray()\n    }\n\n    /** ESP32 flasher checksum: starting from 0xEF, XOR each byte */\n    private fun checksum(data: ByteArray): Int {\n        var value = 0xEF\n        for (b in data) value = value xor (b.toInt() and 0xFF)\n        return value\n    }\n\n    // \u2500\u2500\u2500 Helpers \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n    private fun progress(written: Int, total: Int, speed: Double, stage: String) {\n        emitProgress(\n            mapOf(\n                \"writtenBytes\" to written,\n                \"totalBytes\" to total,\n                \"speedBytesPerSecond\" to speed,\n                \"stage\" to stage,\n            )\n        )\n    }\n\n    private fun requirePort(): UsbSerialPort =\n        port ?: throw IllegalStateException(\"USB serial port is not open\")\n\n    private fun ByteArrayOutputStream.u16(value: Int) {\n        write(value and 0xFF)\n        write((value ushr 8) and 0xFF)\n    }\n\n    private fun ByteArrayOutputStream.u32(value: Int) {\n        write(value and 0xFF)\n        write((value ushr 8) and 0xFF)\n        write((value ushr 16) and 0xFF)\n        write((value ushr 24) and 0xFF)\n    }\n}\n"
+package vink.flasher
+
+import android.content.Context
+import android.hardware.usb.UsbManager
+import com.hoho.android.usbserial.driver.UsbSerialPort
+import com.hoho.android.usbserial.driver.UsbSerialProber
+import java.io.ByteArrayOutputStream
+import java.io.File
+import kotlin.math.max
+import kotlin.math.min
+
+/**
+ * Native ESP32 flashing engine for any ESP32 chip family.
+ * Replaces the PaperS3-specific flasher with a generic implementation.
+ *
+ * Protocol reference: ESP32 ROM Serial Communication Protocol
+ * https://github.com/espressif/esptool/blob/master/docs/en/esptool/serial-protocol.md
+ */
+class EspNativeFlasher(
+    private val context: Context,
+    private val shouldCancel: () -> Boolean,
+    private val emitLog: (String) -> Unit,
+    private val emitProgress: (Map<String, Any>) -> Unit,
+) {
+    private companion object {
+        // SLIP framing
+        const val SLIP_FRAME = 0xC0.toByte()
+        const val SLIP_ESC = 0xDB.toByte()
+        const val SLIP_ESC_FRAME = 0xDC.toByte()
+        const val SLIP_ESC_ESC = 0xDD.toByte()
+
+        // ESP32 download mode commands
+        const val CMD_SYNC = 0x08
+        const val CMD_FLASH_BEGIN = 0x02
+        const val CMD_FLASH_DATA = 0x03
+        const val CMD_FLASH_END = 0x04
+        const val CMD_SPI_SET_PARAMS = 0x0B
+        const val CMD_SPI_ATTACH = 0x0D
+        const val CMD_READ_FLASH_ID = 0x0F
+        const val CMD_READ_MAC = 0x0F
+        const val CMD_GET_CHIP_INFO = 0x0F
+        const val CMD_CHECKSUM = 0x10
+        const val CMD_FLASH_DEFL_BEGIN = 0x05
+        const val CMD_FLASH_DEFL_DATA = 0x06
+        const val CMD_FLASH_DEFL_END = 0x07
+
+        // ESPRESSIF USB Vendor ID
+        const val ESPRESSIF_VID = 0x303A
+
+        // USB Serial JTAG PIDs that indicate ESP32 in download mode
+        val ESP32S3_JTAG_PIDS = setOf(0x1001, 0x1002)
+        val ESP32C6_USB_PIDS = setOf(0x1001, 0x1002, 0x1003)
+        val ESP32H2_USB_PIDS = setOf(0x1001, 0x1002, 0x1003)
+
+        // Block size: 0x400 (1024) is standard for ESP32; some chips use 0x800
+        const val BLOCK_SIZE = 0x400
+        const val READ_TIMEOUT_MS = 5000
+        const val WRITE_TIMEOUT_MS = 5000
+        const val PROGRESS_BLOCK_INTERVAL = 50
+    }
+
+    private var port: UsbSerialPort? = null
+    private val rx = ArrayList<Byte>(8192)
+    private var chipFamily = ChipFamily.UNKNOWN
+
+    // ─── Public API ────────────────────────────────────────────────────────────
+
+    /**
+     * Flash a firmware file to the connected ESP32 device.
+     *
+     * @param deviceName   USB serial port device name (e.g. /dev/bus/usb/001/002)
+     *                     Pass null for auto-detect.
+     * @param profile      Device profile with chip family and flash offset defaults.
+     * @param firmwarePath Path to the .bin file on local storage.
+     * @param flashOffset  Flash address to write to (use profile.defaultFlashOffset.bytes as default).
+     * @param baudRate     UART baud rate (use profile.defaultBaudRate as default).
+     * @param reboot       Whether to reboot the device after flashing.
+     */
+    fun flash(
+        deviceName: String?,
+        profile: EspDeviceProfile,
+        firmwarePath: String,
+        flashOffset: Int = profile.defaultFlashOffset.bytes,
+        baudRate: Int = profile.defaultBaudRate,
+        reboot: Boolean = true,
+    ) {
+        val firmware = File(firmwarePath)
+        require(firmware.exists()) { "固件文件不存在: $firmwarePath" }
+        val bytes = firmware.readBytes()
+        val started = System.currentTimeMillis()
+
+        chipFamily = profile.chipFamily
+
+        openPort(deviceName, baudRate)
+        try {
+            progress(0, bytes.size, 0.0, "连接芯片...")
+            enterBootloader()
+            sync()
+
+            progress(0, bytes.size, 0.0, "读取芯片信息...")
+            val chipInfo = getChipInfo()
+            emitLog("芯片信息: $chipInfo")
+
+            progress(0, bytes.size, 0.0, "初始化 SPI Flash")
+            spiAttach()
+            spiSetParams(chipInfo.flashSize)
+
+            progress(0, bytes.size, 0.0, "开始写入固件")
+            flashBegin(bytes.size, flashOffset)
+
+            val block = ByteArray(BLOCK_SIZE)
+            val blocks = (bytes.size + BLOCK_SIZE - 1) / BLOCK_SIZE
+            var written = 0
+            for (sequence in 0 until blocks) {
+                if (shouldCancel()) throw InterruptedException("Flash cancelled by user")
+                val chunkLength = min(BLOCK_SIZE, bytes.size - written)
+                block.fill(0.toByte())
+                System.arraycopy(bytes, written, block, 0, chunkLength)
+                flashData(block, sequence)
+                written += chunkLength
+
+                if (sequence % PROGRESS_BLOCK_INTERVAL == 0 || sequence == blocks - 1) {
+                    val elapsed = max(1L, System.currentTimeMillis() - started) / 1000.0
+                    val label = if (flashOffset == 0) "正在刷写完整镜像" else "正在刷写固件"
+                    progress(written, bytes.size, written / elapsed, label)
+                }
+            }
+
+            flashEnd(reboot)
+            if (reboot) {
+                progress(bytes.size, bytes.size, 0.0, "正在重启设备")
+                hardReset()
+            }
+            val doneMsg = if (reboot) "完成并重启" else "完成"
+            progress(bytes.size, bytes.size, 0.0, "Done — $doneMsg")
+            emitLog("Flashed ${bytes.size} bytes to offset 0x${Integer.toHexString(flashOffset)}")
+        } finally {
+            closePort()
+        }
+    }
+
+    /**
+     * Probe a connected device and return its chip info.
+     * Call this before flash() to confirm the device is in download mode.
+     */
+    fun probeDevice(deviceName: String?, baudRate: Int = 921600): ProbedDeviceInfo {
+        openPort(deviceName, baudRate)
+        try {
+            enterBootloader()
+            sync()
+            return getChipInfo()
+        } finally {
+            closePort()
+        }
+    }
+
+    // ─── Port management ────────────────────────────────────────────────────────
+
+    private fun openPort(deviceName: String?, baudRate: Int) {
+        val usbManager = context.getSystemService(Context.USB_SERVICE) as UsbManager
+        val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
+        require(drivers.isNotEmpty()) { "未发现 USB 串口设备" }
+
+        val driver = drivers.firstOrNull { it.device.deviceName == deviceName }
+            ?: drivers.firstOrNull { d ->
+                // Prefer Espressif USB JTAG devices
+                d.device.vendorId == ESPRESSIF_VID
+            }
+            ?: drivers.first()
+
+        val device = driver.device
+        require(usbManager.hasPermission(device)) {
+            "没有 USB 权限，请先在系统弹窗中允许 Vink Flasher 访问设备"
+        }
+        val connection = usbManager.openDevice(device)
+            ?: throw IllegalStateException("无法打开 USB 设备: ${device.deviceName}")
+
+        val selectedPort = driver.ports.firstOrNull()
+            ?: throw IllegalStateException("USB 设备没有可用串口: ${device.deviceName}")
+
+        selectedPort.open(connection)
+        selectedPort.setParameters(
+            baudRate,
+            UsbSerialPort.DATABITS_8,
+            UsbSerialPort.STOPBITS_1,
+            UsbSerialPort.PARITY_NONE,
+        )
+        selectedPort.setDTR(false)
+        selectedPort.setRTS(false)
+        port = selectedPort
+        emitLog("USB serial opened at $baudRate baud: ${device.deviceName} (VID=${device.vendorId} PID=${device.productId})")
+    }
+
+    private fun closePort() {
+        try {
+            port?.close()
+        } catch (_: Throwable) {
+        } finally {
+            port = null
+            rx.clear()
+        }
+    }
+
+    // ─── Bootloader reset ───────────────────────────────────────────────────────
+
+    /**
+     * Trigger download mode on ESP32.
+     * Sequence: RTS↑ → DTR↑ → RTS↓ → DTR↓ (for CH340/CP210x auto-baud)
+     */
+    private fun enterBootloader() {
+        val p = requirePort()
+        p.setDTR(false)
+        p.setRTS(true)
+        Thread.sleep(100)
+        p.setDTR(true)
+        p.setRTS(false)
+        Thread.sleep(500)
+        p.setDTR(false)
+        p.setRTS(false)
+        Thread.sleep(100)
+    }
+
+    private fun hardReset() {
+        val p = requirePort()
+        p.setDTR(false)
+        p.setRTS(false)
+        Thread.sleep(100)
+        p.setDTR(true)
+        Thread.sleep(100)
+        p.setDTR(false)
+        Thread.sleep(500)
+    }
+
+    // ─── ESP32 protocol commands ───────────────────────────────────────────────
+
+    private fun sync() {
+        val payload = ByteArray(36)
+        // The first 4 bytes are a "sync" magic; rest are 0x55
+        payload[0] = 0x07
+        payload[1] = 0x07
+        payload[2] = 0x12
+        payload[3] = 0x20
+        for (i in 4 until payload.size) payload[i] = 0x55
+
+        var lastError: Throwable? = null
+        repeat(10) { attempt ->
+            try {
+                rx.clear()
+                sendCommand(CMD_SYNC, payload)
+                readCommandResponse(CMD_SYNC, 3000, checkStatus = false)
+                rx.clear()
+                emitLog("SYNC OK")
+                return
+            } catch (error: Throwable) {
+                lastError = error
+                Thread.sleep(100)
+                emitLog("SYNC attempt ${attempt + 1} failed: ${error.message}")
+            }
+        }
+        throw IllegalStateException("ESP32 下载模式同步失败: ${lastError?.message}", lastError)
+    }
+
+    private fun getChipInfo(): ProbedDeviceInfo {
+        // Try the CHIP_INFO command (0x0F with different subcommand)
+        val chipData = sendWithResponse(CMD_GET_CHIP_INFO, byteArrayOf(0x00), 3000)
+        if (chipData.size >= 12) {
+            val chipType = chipData[0].toInt() and 0xFF
+            val chipRevision = chipData[1].toInt() and 0xFF
+            val numCores = chipData[2].toInt() and 0xFF
+            val cpuFreq = (chipData[3].toInt() and 0xFF) or
+                ((chipData[4].toInt() and 0xFF) shl 8)
+            val chipFamilyId = chipData[5].toInt() and 0xFF
+
+            val family = when (chipFamilyId) {
+                1 -> ChipFamily.ESP32
+                2 -> ChipFamily.ESP32S2
+                4 -> ChipFamily.ESP32S3
+                5 -> ChipFamily.ESP32C2
+                6 -> ChipFamily.ESP32C3
+                7 -> ChipFamily.ESP32C6
+                8 -> ChipFamily.ESP32H2
+                9 -> ChipFamily.ESP32P4
+                else -> ChipFamily.UNKNOWN
+            }
+            chipFamily = family
+
+            // Read MAC address
+            val macBytes = try {
+                sendWithResponse(CMD_READ_MAC, byteArrayOf(0x04), 2000)
+            } catch (_: Throwable) {
+                byteArrayOf()
+            }
+            val mac = if (macBytes.size >= 6) {
+                macBytes.take(6).joinToString(":") {
+                    String.format("%02X", it.toInt() and 0xFF)
+                }
+            } else {
+                "unknown"
+            }
+
+            // Read flash ID
+            val flashSize = try {
+                val flashIdData = sendWithResponse(CMD_READ_FLASH_ID, byteArrayOf(), 2000)
+                if (flashIdData.size >= 4) {
+                    // Flash size encoded in the response (JEDEC ID)
+                    val flashId = (flashIdData[0].toInt() and 0xFF shl 16) or
+                        (flashIdData[1].toInt() and 0xFF shl 8) or
+                        (flashIdData[2].toInt() and 0xFF)
+                    // Common flash sizes: 0x14=16MB, 0x13=8MB, 0x12=4MB, 0x11=2MB
+                    when (flashIdData[2].toInt() and 0xFF) {
+                        0x14 -> 16 * 1024L * 1024L
+                        0x13 -> 8 * 1024L * 1024L
+                        0x12 -> 4 * 1024L * 1024L
+                        0x11 -> 2 * 1024L * 1024L
+                        else -> family.defaultFlashSizeBytes
+                    }
+                } else {
+                    family.defaultFlashSizeBytes
+                }
+            } catch (_: Throwable) {
+                family.defaultFlashSizeBytes
+            }
+
+            val profile = EspDeviceProfile.fromVidPid(
+                requirePort().let { port ->
+                    port.javaClass.getDeclaredField("device")
+                        .apply { isAccessible = true }
+                        .let { field -> (field.get(port) as? com.hoho.android.usbserial.driver.UsbSerialDriver)?.device }
+                        ?.vendorId ?: ESPRESSIF_VID
+                },
+                requirePort().let { port ->
+                    port.javaClass.getDeclaredField("device")
+                        .apply { isAccessible = true }
+                        .let { field -> (field.get(port) as? com.hoho.android.usbserial.driver.UsbSerialDriver)?.device }
+                        ?.productId ?: 0x1001
+                }
+            )
+
+            return ProbedDeviceInfo(
+                chipFamily = family,
+                chipRevision = chipRevision,
+                flashSize = flashSize,
+                macAddress = mac,
+                profile = profile,
+                rawDescription = "ESP32 family=0x${Integer.toHexString(chipFamilyId)} " +
+                    "revision=$chipRevision cores=$numCores freq=${cpuFreq}MHz",
+            )
+        }
+
+        // Fallback: probe via MAC read
+        chipFamily = ChipFamily.ESP32S3 // assume S3 if PaperS3 is common
+        return ProbedDeviceInfo(
+            chipFamily = chipFamily,
+            chipRevision = 0,
+            flashSize = chipFamily.defaultFlashSizeBytes,
+            macAddress = "unknown",
+            profile = EspDeviceProfile.PAPER_S3,
+            rawDescription = "Probe fallback — assuming ESP32-S3",
+        )
+    }
+
+    private fun spiAttach() {
+        sendCommand(CMD_SPI_ATTACH, ByteArray(8))
+        readCommandResponse(CMD_SPI_ATTACH, READ_TIMEOUT_MS, checkStatus = false)
+    }
+
+    private fun spiSetParams(flashSizeBytes: Long) {
+        val out = ByteArrayOutputStream()
+        // flash_size (4B), block_size (4B), sector_size (4B), page_size (4B), status_mask (4B)
+        out.u32(0) // starting address
+        out.u32((flashSizeBytes and 0xFFFFFFFF).toInt())
+        out.u32(0x10000) // block size = 64KB
+        out.u32(0x1000)  // sector size = 4KB
+        out.u32(0x100)   // page size = 256B
+        out.u32(0xFFFF)  // status mask
+        sendCommand(CMD_SPI_SET_PARAMS, out.toByteArray())
+        readCommandResponse(CMD_SPI_SET_PARAMS, READ_TIMEOUT_MS, checkStatus = false)
+    }
+
+    private fun flashBegin(size: Int, offset: Int) {
+        val blocks = (size + BLOCK_SIZE - 1) / BLOCK_SIZE
+        // Erase size: aligned to 4KB sectors
+        val eraseSize = ((size + 0xFFF) / 0x1000) * 0x1000
+        val out = ByteArrayOutputStream()
+        out.u32(eraseSize)
+        out.u32(blocks)
+        out.u32(BLOCK_SIZE)
+        out.u32(offset)
+        out.u32(0) // encryption flag: false
+
+        val timeoutMs = max(5000, ((eraseSize * 1000L) / 175000L).toInt() + 15000)
+        var lastError: Throwable? = null
+        repeat(3) { attempt ->
+            try {
+                rx.clear()
+                sendCommand(CMD_FLASH_BEGIN, out.toByteArray())
+                readCommandResponse(CMD_FLASH_BEGIN, timeoutMs)
+                emitLog("FLASH_BEGIN OK — $blocks blocks to erase=$eraseSize")
+                return
+            } catch (error: Throwable) {
+                lastError = error
+                emitLog("FLASH_BEGIN attempt ${attempt + 1} failed: ${error.message}")
+                if (attempt < 2) {
+                    drainResponses(10_000)
+                    rx.clear()
+                }
+            }
+        }
+        throw IllegalStateException("FLASH_BEGIN failed after 3 attempts: ${lastError?.message}", lastError)
+    }
+
+    private fun flashData(block: ByteArray, sequence: Int) {
+        val out = ByteArrayOutputStream(BLOCK_SIZE + 16)
+        out.u32(block.size)
+        out.u32(sequence)
+        out.u32(0) // zero (data_size in SPI attach mode)
+        out.u32(0) // zero (block_size in SPI attach mode)
+        out.write(block)
+        sendCommand(CMD_FLASH_DATA, out.toByteArray(), checksum(block))
+        readCommandResponse(CMD_FLASH_DATA, READ_TIMEOUT_MS)
+    }
+
+    private fun flashEnd(reboot: Boolean) {
+        val out = ByteArrayOutputStream(4)
+        out.u32(if (reboot) 0 else 1)
+        sendCommand(CMD_FLASH_END, out.toByteArray())
+        readCommandResponse(CMD_FLASH_END, READ_TIMEOUT_MS)
+    }
+
+    // ─── Low-level SLIP protocol ────────────────────────────────────────────────
+
+    private fun sendCommand(command: Int, data: ByteArray, checksum: Int = 0) {
+        val out = ByteArrayOutputStream(data.size + 8)
+        out.write(0x00)             // direction: host→device
+        out.write(command)
+        out.u16(data.size)
+        out.u32(checksum)
+        out.write(data)
+        val encoded = slipEncode(out.toByteArray())
+        requirePort().write(encoded, WRITE_TIMEOUT_MS)
+    }
+
+    private fun sendWithResponse(command: Int, data: ByteArray, timeoutMs: Int): ByteArray {
+        sendCommand(command, data)
+        return readCommandResponse(command, timeoutMs)
+    }
+
+    private fun readCommandResponse(
+        command: Int,
+        timeoutMs: Int,
+        checkStatus: Boolean = true,
+    ): ByteArray {
+        repeat(100) {
+            val packet = readSlipPacket(timeoutMs)
+            if (packet.size < 8) return@repeat
+            val response = packet[0].toInt() and 0xFF
+            val op = packet[1].toInt() and 0xFF
+            if (response != 0x01 || op != command) return@repeat
+            val dataLength = (packet[2].toInt() and 0xFF) or ((packet[3].toInt() and 0xFF) shl 8)
+            val value = (packet[4].toInt() and 0xFF) or
+                ((packet[5].toInt() and 0xFF) shl 8) or
+                ((packet[6].toInt() and 0xFF) shl 16) or
+                ((packet[7].toInt() and 0xFF) shl 24)
+            if (packet.size < 8 + dataLength) {
+                throw IllegalStateException(
+                    "ESP32 响应长度异常: command=0x${command.toString(16)}"
+                )
+            }
+            if (checkStatus && value != 0) {
+                throw IllegalStateException(
+                    "ESP32 拒绝命令: command=0x${command.toString(16)}, value=$value"
+                )
+            }
+            return packet.copyOfRange(8, 8 + dataLength)
+        }
+        throw java.util.concurrent.TimeoutException(
+            "ESP32 未响应命令: 0x${command.toString(16)}"
+        )
+    }
+
+    private fun readSlipPacket(timeoutMs: Int): ByteArray {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        val temp = ByteArray(4096)
+        while (System.currentTimeMillis() < deadline) {
+            val end = rx.indexOf(SLIP_FRAME)
+            if (end >= 0) {
+                val raw = rx.subList(0, end + 1).toByteArray()
+                rx.subList(0, end + 1).clear()
+                val decoded = slipDecode(raw)
+                if (decoded.isNotEmpty()) return decoded
+                continue
+            }
+            val read = requirePort().read(temp, 20)
+            if (read > 0) {
+                for (i in 0 until read) rx.add(temp[i])
+            }
+        }
+        throw java.util.concurrent.TimeoutException("Timed out waiting for ESP32 response")
+    }
+
+    private fun drainResponses(durationMs: Long) {
+        val until = System.currentTimeMillis() + durationMs
+        while (System.currentTimeMillis() < until) {
+            try {
+                readSlipPacket(250)
+            } catch (_: Throwable) {
+                // keep draining
+            }
+        }
+    }
+
+    private fun slipEncode(packet: ByteArray): ByteArray {
+        val out = ByteArrayOutputStream(packet.size + 2)
+        out.write(SLIP_FRAME.toInt())
+        for (b in packet) {
+            when (b.toInt() and 0xFF) {
+                0xC0 -> {
+                    out.write(SLIP_ESC.toInt())
+                    out.write(SLIP_ESC_FRAME.toInt())
+                }
+                0xDB -> {
+                    out.write(SLIP_ESC.toInt())
+                    out.write(SLIP_ESC_ESC.toInt())
+                }
+                else -> out.write(b.toInt())
+            }
+        }
+        out.write(SLIP_FRAME.toInt())
+        return out.toByteArray()
+    }
+
+    private fun slipDecode(packet: ByteArray): ByteArray {
+        val out = ByteArrayOutputStream(packet.size)
+        var i = 0
+        while (i < packet.size) {
+            val b = packet[i].toInt() and 0xFF
+            when {
+                b == 0xC0 -> Unit
+                b == 0xDB && i + 1 < packet.size -> {
+                    val next = packet[++i].toInt() and 0xFF
+                    when (next) {
+                        0xDC -> out.write(0xC0)
+                        0xDD -> out.write(0xDB)
+                        else -> out.write(next)
+                    }
+                }
+                else -> out.write(b)
+            }
+            i++
+        }
+        return out.toByteArray()
+    }
+
+    /** ESP32 flasher checksum: starting from 0xEF, XOR each byte */
+    private fun checksum(data: ByteArray): Int {
+        var value = 0xEF
+        for (b in data) value = value xor (b.toInt() and 0xFF)
+        return value
+    }
+
+    // ─── Helpers ────────────────────────────────────────────────────────────────
+
+    private fun progress(written: Int, total: Int, speed: Double, stage: String) {
+        emitProgress(
+            mapOf(
+                "writtenBytes" to written,
+                "totalBytes" to total,
+                "speedBytesPerSecond" to speed,
+                "stage" to stage,
+            )
+        )
+    }
+
+    private fun requirePort(): UsbSerialPort =
+        port ?: throw IllegalStateException("USB serial port is not open")
+
+    private fun ByteArrayOutputStream.u16(value: Int) {
+        write(value and 0xFF)
+        write((value ushr 8) and 0xFF)
+    }
+
+    private fun ByteArrayOutputStream.u32(value: Int) {
+        write(value and 0xFF)
+        write((value ushr 8) and 0xFF)
+        write((value ushr 16) and 0xFF)
+        write((value ushr 24) and 0xFF)
+    }
+}

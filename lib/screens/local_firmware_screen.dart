@@ -535,7 +535,7 @@ class _PathTile extends StatelessWidget {
             child: Text(
               path,
               style: theme.textTheme.bodySmall
-                  ?.copyWith(color: Colors.white45, fontFamily: 'monospace'),
+                  ?.copyWith(color: Colors.white38, fontFamily: 'monospace'),
             ),
           ),
         ],

@@ -278,19 +278,19 @@ class _IntroCard extends StatelessWidget {
     final theme = Theme.of(context);
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
         child: Row(
           children: [
             Container(
-              width: 36,
-              height: 36,
+              width: 30,
+              height: 30,
               decoration: BoxDecoration(
                 color: const Color(0xFF202022),
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(Icons.folder_copy_rounded),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -298,7 +298,6 @@ class _IntroCard extends StatelessWidget {
                   Text('本地固件与烧录入口',
                       style: theme.textTheme.titleMedium
                           ?.copyWith(fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 2),
                   Text(
                     localCount == 0
                         ? '先到“固件”页下载需要的版本，然后在这里统一管理和烧录。'
@@ -358,12 +357,12 @@ class _EmptyLocalFirmware extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(14),
         child: Column(
           children: [
             const Icon(Icons.inventory_2_outlined,
-                size: 36, color: Colors.white38),
-            const SizedBox(height: 8),
+                size: 30, color: Colors.white38),
+            const SizedBox(height: 6),
             Text('暂无本地固件', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 4),
             const Text(
@@ -405,7 +404,7 @@ class _LocalFirmwareCard extends StatelessWidget {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(9, 8, 9, 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -432,10 +431,10 @@ class _LocalFirmwareCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Wrap(
-              spacing: 6,
-              runSpacing: 6,
+              spacing: 5,
+              runSpacing: 4,
               children: [
                 _MetaPill(
                     icon: Icons.sd_storage_outlined, text: firmware.sizeLabel),
@@ -448,46 +447,42 @@ class _LocalFirmwareCard extends StatelessWidget {
                     icon: Icons.cloud_outlined, text: firmware.sourceLabel),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             _StatusLine(info: info),
             if (info.filePath != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                info.filePath!,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: Colors.white38, fontFamily: 'monospace'),
-              ),
+              const SizedBox(height: 2),
+              _PathTile(path: info.filePath!),
             ],
-            const SizedBox(height: 10),
-            if (isDownloading) ...[
-              LinearProgressIndicator(value: progress),
-              const SizedBox(height: 8),
-              Text(
-                  progress == null
-                      ? '下载中...'
-                      : '下载中 ${(progress! * 100).clamp(0, 100).toStringAsFixed(0)}%',
-                  style: const TextStyle(color: Colors.white70)),
-            ] else ...[
+            const SizedBox(height: 6),
+            if (isDownloading)
+              _Downloading(progress: progress)
+            else
               Row(
                 children: [
                   Expanded(
                     child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                      ),
                       onPressed: complete ? onFlash : onDownload,
                       icon: Icon(complete
                           ? Icons.bolt_rounded
                           : Icons.download_rounded),
                       label: Text(complete
-                          ? '刷写此版本'
+                          ? '刷写'
                           : partial
                               ? '继续下载'
                               : '下载'),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                      ),
                       onPressed: onDownload,
                       icon: Icon(complete
                           ? Icons.refresh_rounded
@@ -495,21 +490,78 @@ class _LocalFirmwareCard extends StatelessWidget {
                       label: Text(complete ? '重新下载' : '下载'),
                     ),
                   ),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    tooltip: '删除本地固件',
+                    onPressed: onDelete,
+                    icon: const Icon(Icons.delete_outline_rounded),
+                  ),
                 ],
               ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: TextButton.icon(
-                  onPressed: onDelete,
-                  icon: const Icon(Icons.delete_outline_rounded),
-                  label: const Text('删除本地固件'),
-                ),
-              ),
-            ],
           ],
         ),
       ),
+    );
+  }
+}
+
+
+class _PathTile extends StatelessWidget {
+  const _PathTile({required this.path});
+
+  final String path;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Theme(
+      data: theme.copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(left: 6, right: 0, bottom: 3),
+        visualDensity: VisualDensity.compact,
+        title: Text('本地路径', style: theme.textTheme.labelLarge),
+        subtitle: Text(
+          path,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.bodySmall
+              ?.copyWith(color: Colors.white38, fontFamily: 'monospace'),
+        ),
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              path,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: Colors.white45, fontFamily: 'monospace'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Downloading extends StatelessWidget {
+  const _Downloading({required this.progress});
+
+  final double? progress;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(child: LinearProgressIndicator(value: progress)),
+        const SizedBox(width: 8),
+        Text(
+          progress == null
+              ? '下载中'
+              : '${(progress! * 100).clamp(0, 100).toStringAsFixed(0)}%',
+          style: const TextStyle(color: Colors.white70, fontSize: 12),
+        ),
+      ],
     );
   }
 }
@@ -539,25 +591,23 @@ class _StatusLine extends StatelessWidget {
         ),
     };
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
-      decoration: BoxDecoration(
-        color: const Color(0xFF101011),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF2B2B2E)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 16, color: color),
-          const SizedBox(width: 8),
-          Expanded(
-              child: Text(text,
-                  style: TextStyle(
-                      color: color,
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w600))),
-        ],
-      ),
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -578,7 +628,7 @@ class _MetaPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
         color: const Color(0xFF202022),
         borderRadius: BorderRadius.circular(999),
@@ -587,11 +637,11 @@ class _MetaPill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: Colors.white70),
+          Icon(icon, size: 11, color: Colors.white70),
           const SizedBox(width: 4),
           Text(text,
               style: const TextStyle(
-                  fontSize: 10.5,
+                  fontSize: 10,
                   color: Colors.white70,
                   fontWeight: FontWeight.w600)),
         ],

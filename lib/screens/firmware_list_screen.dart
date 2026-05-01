@@ -171,6 +171,16 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
     ];
   }
 
+
+  List<List<Firmware>> _groupFirmwares(List<Firmware> firmwares) {
+    final groups = <String, List<Firmware>>{};
+    for (final firmware in firmwares) {
+      final key = '${firmware.source.name}:${firmware.name}';
+      groups.putIfAbsent(key, () => <Firmware>[]).add(firmware);
+    }
+    return groups.values.toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -199,6 +209,7 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
           final filtered = firmwares
               .where((firmware) => _deviceIdOf(firmware) == _selectedDevice)
               .toList();
+          final grouped = _groupFirmwares(filtered);
 
           return RefreshIndicator(
             onRefresh: _refresh,
@@ -225,28 +236,32 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
                     child: Center(child: Text('当前设备暂无固件')),
                   )
                 else
-                  FirmwareCard(
-                    firmwares: filtered,
-                    isDownloading: (firmware) =>
-                        _downloadProgress.containsKey(firmware.id),
-                    downloadProgress: (firmware) =>
-                        _downloadProgress[firmware.id],
-                    localStatus: (firmware) =>
-                        _localStatus[firmware.id] ?? LocalFirmwareStatus.none,
-                    partialBytes: (firmware) => _partialBytes[firmware.id],
-                    showDeleteAction: false,
-                    showFlashAction: false,
-                    onDownload: _download,
-                    onDelete: _deleteLocal,
-                    onFlash: (firmware) async {
-                      if (_localPaths[firmware.id] == null &&
-                          firmware.localPath == null) {
-                        await _download(firmware);
-                      }
-                      if (mounted && _localPaths[firmware.id] != null)
-                        _openFlash(firmware);
-                    },
-                  ),
+                  for (final group in grouped) ...[
+                    FirmwareCard(
+                      firmwares: group,
+                      isDownloading: (firmware) =>
+                          _downloadProgress.containsKey(firmware.id),
+                      downloadProgress: (firmware) =>
+                          _downloadProgress[firmware.id],
+                      localStatus: (firmware) =>
+                          _localStatus[firmware.id] ?? LocalFirmwareStatus.none,
+                      partialBytes: (firmware) => _partialBytes[firmware.id],
+                      showDeleteAction: false,
+                      showFlashAction: false,
+                      onDownload: _download,
+                      onDelete: _deleteLocal,
+                      onFlash: (firmware) async {
+                        if (_localPaths[firmware.id] == null &&
+                            firmware.localPath == null) {
+                          await _download(firmware);
+                        }
+                        if (mounted && _localPaths[firmware.id] != null) {
+                          _openFlash(firmware);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                  ],
               ],
             ),
           );
@@ -273,6 +288,7 @@ class _DeviceFilterBar extends StatelessWidget {
   final List<_DeviceFilter> filters;
   final String selected;
   final ValueChanged<String> onSelected;
+
 
   @override
   Widget build(BuildContext context) {

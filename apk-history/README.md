@@ -9,6 +9,22 @@ APK 二进制文件不直接放在源码树里，避免 Git 仓库被大文件�
 
 ## 版本记录
 
+### v0.3.21+42 / `vink-flasher-v0_3_21.apk`
+
+发布时间：2026-05-01
+
+归档位置：
+
+- Latest: <https://github.com/Vivitoto/Vink-Flasher/releases/download/latest/vink-flasher-v0_3_21.apk>
+- History: <https://github.com/Vivitoto/Vink-Flasher/releases/download/apk-history/vink-flasher-v0_3_21.apk>
+
+更新内容：
+
+- 固件页按“来源 + 固件名”分组，M5Burner/LilyGo 新增固件源与 Vink 固件使用一致的卡片版式。
+- Vink 固件继续保留同一固件下的历史版本折叠；第三方固件不再被错误塞进 Vink 历史版本。
+- 压缩固件卡片间距、状态行、操作按钮和更新说明区域，保留版本、大小、镜像类型、下载状态、说明/更新、下载/刷写/删除等现有内容。
+- 本地/烧录页同步压缩：说明卡、固件卡、状态行、路径、下载/刷写/删除操作改为更紧凑的同风格布局。
+
 ### v0.3.20+41 / `vink-flasher-v0_3_20.apk`
 
 发布时间：2026-05-01

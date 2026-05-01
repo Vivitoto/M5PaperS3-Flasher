@@ -39,7 +39,7 @@ class FirmwareCard extends StatelessWidget {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(10),
+        padding: const EdgeInsets.fromLTRB(8, 8, 8, 7),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -53,7 +53,7 @@ class FirmwareCard extends StatelessWidget {
                       Text(
                         latest.name,
                         style: theme.textTheme.titleMedium?.copyWith(
-                          fontSize: 17,
+                          fontSize: 16,
                           fontWeight: FontWeight.w800,
                           letterSpacing: -0.2,
                         ),
@@ -77,7 +77,7 @@ class FirmwareCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 6),
             _FirmwareVersionPanel(
               firmware: latest,
               title: '最新版本',
@@ -91,7 +91,7 @@ class FirmwareCard extends StatelessWidget {
               onFlash: showFlashAction ? onFlash : null,
             ),
             if (history.isNotEmpty) ...[
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               Theme(
                 data: theme.copyWith(dividerColor: Colors.transparent),
                 child: ExpansionTile(
@@ -100,9 +100,9 @@ class FirmwareCard extends StatelessWidget {
                   title: Text('历史版本',
                       style: theme.textTheme.titleSmall
                           ?.copyWith(fontWeight: FontWeight.w800)),
-                  subtitle: Text('可下载指定版本 · ${history.length} 个版本',
+                  subtitle: Text('${history.length} 个历史版本',
                       style:
-                          const TextStyle(color: Colors.white54, fontSize: 12)),
+                          const TextStyle(color: Colors.white54, fontSize: 11)),
                   children: [
                     for (final item in history) ...[
                       _FirmwareVersionPanel(
@@ -165,10 +165,10 @@ class _FirmwareVersionPanel extends StatelessWidget {
     final partial = status == LocalFirmwareStatus.partial;
 
     final child = Container(
-      padding: EdgeInsets.all(dense ? 8 : 10),
+      padding: EdgeInsets.all(dense ? 7 : 8),
       decoration: BoxDecoration(
         color: const Color(0xFF101011),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
             color: downloaded ? Colors.white30 : const Color(0xFF2B2B2E)),
       ),
@@ -196,10 +196,10 @@ class _FirmwareVersionPanel extends StatelessWidget {
                     size: 18, color: Colors.white70),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 5),
           Wrap(
-            spacing: 6,
-            runSpacing: 6,
+            spacing: 5,
+            runSpacing: 4,
             children: [
               _MetaPill(icon: Icons.tag_rounded, text: firmware.version),
               _MetaPill(
@@ -209,21 +209,21 @@ class _FirmwareVersionPanel extends StatelessWidget {
                   text: firmware.flashOffset == 0 ? '完整镜像' : 'App分区'),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           _LocalStatusLine(
             status: status,
             partialBytes: partialBytes,
             totalBytes: firmware.sizeBytes,
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           _ChangelogTile(
-            title: dense ? '更新内容' : '更新内容',
+            title: '说明 / 更新',
             subtitle: firmware.description,
             changelog: firmware.changelog,
             initiallyExpanded: expanded,
             dense: true,
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           if (isDownloading)
             _Downloading(progress: progress)
           else
@@ -262,44 +262,45 @@ class _VersionActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    final downloadLabel = downloaded
+        ? '重新下载'
+        : partial
+            ? '继续下载'
+            : '下载';
+    return Row(
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: FilledButton.icon(
-                onPressed: onDownload,
-                icon: Icon(downloaded
-                    ? Icons.refresh_rounded
-                    : Icons.download_rounded),
-                label: Text(downloaded
-                    ? '重新下载'
-                    : partial
-                        ? '继续下载'
-                        : '下载'),
-              ),
+        Expanded(
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
             ),
-            if (onFlash != null) ...[
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onFlash,
-                  icon: const Icon(Icons.bolt_rounded),
-                  label: Text(downloaded ? '刷写此版本' : '下载并刷写'),
-                ),
-              ),
-            ],
-          ],
+            onPressed: onDownload,
+            icon: Icon(downloaded ? Icons.refresh_rounded : Icons.download_rounded),
+            label: Text(downloadLabel),
+          ),
         ),
-        if (onDelete != null) ...[
-          const SizedBox(height: 6),
-          SizedBox(
-            width: double.infinity,
-            child: TextButton.icon(
-              onPressed: onDelete,
-              icon: const Icon(Icons.delete_outline_rounded),
-              label: const Text('删除本地固件'),
+        if (onFlash != null) ...[
+          const SizedBox(width: 6),
+          Expanded(
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+              ),
+              onPressed: onFlash,
+              icon: const Icon(Icons.bolt_rounded),
+              label: Text(downloaded ? '刷写' : '下载刷写'),
             ),
+          ),
+        ],
+        if (onDelete != null) ...[
+          const SizedBox(width: 4),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            tooltip: '删除本地固件',
+            onPressed: onDelete,
+            icon: const Icon(Icons.delete_outline_rounded),
           ),
         ],
       ],
@@ -316,7 +317,7 @@ class _MetaPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
         color: const Color(0xFF202022),
         borderRadius: BorderRadius.circular(999),
@@ -325,11 +326,11 @@ class _MetaPill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: Colors.white70),
+          Icon(icon, size: 11, color: Colors.white70),
           const SizedBox(width: 4),
           Text(text,
               style: const TextStyle(
-                  fontSize: 10.5,
+                  fontSize: 10,
                   color: Colors.white70,
                   fontWeight: FontWeight.w600)),
         ],
@@ -346,10 +347,10 @@ class _Downloading extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
       decoration: BoxDecoration(
         color: const Color(0xFF202022),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(13),
         border: Border.all(color: const Color(0xFF303033)),
       ),
       child: Row(
@@ -400,25 +401,23 @@ class _LocalStatusLine extends StatelessWidget {
         ),
     };
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
-      decoration: BoxDecoration(
-        color: const Color(0xFF151516),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF2B2B2E)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 16, color: color),
-          const SizedBox(width: 8),
-          Expanded(
-              child: Text(text,
-                  style: TextStyle(
-                      color: color,
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w600))),
-        ],
-      ),
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -458,7 +457,7 @@ class _ChangelogTile extends StatelessWidget {
       child: ExpansionTile(
         tilePadding: EdgeInsets.zero,
         childrenPadding:
-            EdgeInsets.only(left: dense ? 6 : 0, right: 0, bottom: 6),
+            EdgeInsets.only(left: dense ? 6 : 0, right: 0, bottom: 4),
         initiallyExpanded: initiallyExpanded,
         title: Text(
           title,

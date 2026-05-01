@@ -9,6 +9,24 @@ APK 二进制文件不直接放在源码树里，避免 Git 仓库被大文件�
 
 ## 版本记录
 
+### v0.3.20+41 / `vink-flasher-v0_3_20.apk`
+
+发布时间：2026-05-01
+
+归档位置：
+
+- Latest: <https://github.com/Vivitoto/Vink-Flasher/releases/download/latest/vink-flasher-v0_3_20.apk>
+- History: <https://github.com/Vivitoto/Vink-Flasher/releases/download/apk-history/vink-flasher-v0_3_20.apk>
+
+更新内容：
+
+- 重新整理设置页“烧录模式”命名：Paper S3、LilyGo T5、通用模式。
+- 移除用户界面里的开发期/对照测试名称，例如“原生模式”“ESP32-S3 profile”“Ink Box 对照模式”。
+- 当前版本只保留三个正式烧录模式；旧测试/备用入口不再作为可选模式维护。
+- 设置页的“自定义固件 URL”现在会进入固件列表，作为其他设备/通用模式的下载入口。
+- 接入 ink-box APK 解析出的固件源：M5Burner PaperS3 阅读器固件与 LilyGo T5 4.7 墨阅书匣；LilyGo zip 包下载后自动解出 .bin。
+- 固件页设备筛选改为与 ink-box 一致的两类：M5Stack / LilyGo。
+
 ### v0.3.18+39 / `vink-flasher-v0_3_18.apk`
 
 发布时间：2026-04-30

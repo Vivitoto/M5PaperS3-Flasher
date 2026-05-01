@@ -21,7 +21,7 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
   final Map<String, String> _localPaths = {};
   final Map<String, LocalFirmwareStatus> _localStatus = {};
   final Map<String, int> _partialBytes = {};
-  String _selectedDevice = 'papers3';
+  String _selectedDevice = 'm5stack';
 
   @override
   void initState() {
@@ -151,18 +151,23 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
 
   String _deviceIdOf(Firmware firmware) {
     final text =
-        '${firmware.id} ${firmware.name} ${firmware.description}'.toLowerCase();
-    if (text.contains('papers3') || text.contains('paper s3')) return 'papers3';
-    return 'other';
+        '${firmware.id} ${firmware.name} ${firmware.description} ${firmware.downloadUrl}'.toLowerCase();
+    if (firmware.source == FirmwareSource.lilyGo ||
+        text.contains('lilygo') ||
+        text.contains('t5-4-7') ||
+        text.contains('t5 4.7')) {
+      return 'lilygo';
+    }
+    return 'm5stack';
   }
 
   List<_DeviceFilter> _deviceFilters(List<Firmware> firmwares) {
     final ids = firmwares.map(_deviceIdOf).toSet();
     return [
-      if (ids.contains('papers3'))
-        const _DeviceFilter(id: 'papers3', label: 'M5Stack Paper S3'),
-      if (ids.contains('other'))
-        const _DeviceFilter(id: 'other', label: '其他设备'),
+      if (ids.contains('m5stack'))
+        const _DeviceFilter(id: 'm5stack', label: 'M5Stack'),
+      if (ids.contains('lilygo'))
+        const _DeviceFilter(id: 'lilygo', label: 'LilyGo'),
     ];
   }
 

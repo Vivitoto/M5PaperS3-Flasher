@@ -99,51 +99,6 @@ class EsptoolService {
           offset,
           firmware.path,
         ],
-      'ink_box' || 'compatible' => <String>[
-          // Ink Box compatibility profile: keep the official esptool flow,
-          // default reset, no stub, compressed write and 460800 baud for A/B
-          // verification against Ink Box behavior.
-          '--chip',
-          'auto',
-          '--port',
-          port,
-          '--baud',
-          '460800',
-          '--before',
-          'default_reset',
-          '--after',
-          'hard_reset',
-          '--no-stub',
-          'write_flash',
-          '-z',
-          offset,
-          firmware.path,
-        ],
-      'auto_reset' || 'stable' => <String>[
-          // Experimental auto-reset profile: official esptool write path with
-          // the patched Android/PaperS3 USB-JTAG reset sequence. Kept as a
-          // fallback, but not the default because M5Stack documents PaperS3
-          // download mode as a manual long-press flow.
-          '--chip',
-          'esp32s3',
-          '--port',
-          port,
-          '--baud',
-          baudRate.toString(),
-          '--before',
-          'usb_reset',
-          '--after',
-          'hard_reset',
-          'write_flash',
-          '--flash_size',
-          flashSize,
-          '--flash_mode',
-          'dio',
-          '--flash_freq',
-          '80m',
-          offset,
-          firmware.path,
-        ],
       _ => <String>[
           // Legacy PaperS3 manual esptool fallback. The default PaperS3 path in
           // FlashScreen uses the in-app 0xFlash-compatible backend instead.

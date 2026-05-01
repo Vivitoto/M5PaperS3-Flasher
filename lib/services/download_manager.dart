@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
@@ -83,6 +84,7 @@ class DownloadManager {
     final file = await _targetFile(firmware);
     final tempFile = File('${file.path}.part');
     final expectedSize = firmware.sizeBytes;
+    final archiveDownload = _isArchiveDownload(firmware);
 
     if (force) {
       if (await file.exists()) await file.delete();
@@ -103,7 +105,7 @@ class DownloadManager {
     }
 
     var existing = await tempFile.exists() ? await tempFile.length() : 0;
-    if (expectedSize != null && expectedSize > 0 && existing > expectedSize) {
+    if (!archiveDownload && expectedSize != null && expectedSize > 0 && existing > expectedSize) {
       await tempFile.delete();
       existing = 0;
     }
@@ -156,13 +158,23 @@ class DownloadManager {
     }
 
     final finalLength = await tempFile.length();
-    if (expectedSize != null && expectedSize > 0 && finalLength != expectedSize) {
+    if (!archiveDownload && expectedSize != null && expectedSize > 0 && finalLength != expectedSize) {
       await tempFile.delete();
       throw Exception('Download size mismatch: expected $expectedSize bytes, got $finalLength bytes');
     }
 
     if (await file.exists()) await file.delete();
-    await tempFile.rename(file.path);
+    if (archiveDownload) {
+      await _extractBinFromArchive(tempFile, file);
+      await tempFile.delete();
+      final extractedLength = await file.length();
+      if (expectedSize != null && expectedSize > 0 && extractedLength != expectedSize) {
+        await file.delete();
+        throw Exception('Archive size mismatch: expected $expectedSize bytes, got $extractedLength bytes');
+      }
+    } else {
+      await tempFile.rename(file.path);
+    }
     final verified = await verify(file, firmware.hash);
     yield DownloadProgress(
       receivedBytes: await file.length(),
@@ -230,9 +242,37 @@ class DownloadManager {
     if (!await directory.exists()) await directory.create(recursive: true);
     final assetName = Uri.tryParse(firmware.downloadUrl)?.pathSegments.last;
     final fallback = '${firmware.id.replaceAll(RegExp(r'[^a-zA-Z0-9_.-]'), '_')}.bin';
-    final safeName = (assetName == null || assetName.isEmpty ? fallback : assetName)
+    var safeName = (assetName == null || assetName.isEmpty ? fallback : assetName)
         .replaceAll(RegExp(r'[^a-zA-Z0-9_.-]'), '_');
+    if (safeName.toLowerCase().endsWith('.zip')) {
+      safeName = safeName.substring(0, safeName.length - 4);
+    }
+    if (!safeName.toLowerCase().endsWith('.bin')) {
+      safeName = '$safeName.bin';
+    }
     return File('${directory.path}/$safeName');
+  }
+
+  bool _isArchiveDownload(Firmware firmware) {
+    final path = Uri.tryParse(firmware.downloadUrl)?.path.toLowerCase() ?? '';
+    return path.endsWith('.zip');
+  }
+
+  Future<void> _extractBinFromArchive(File archiveFile, File targetFile) async {
+    final archive = ZipDecoder().decodeBytes(await archiveFile.readAsBytes());
+    ArchiveFile? bin;
+    for (final file in archive.files) {
+      if (file.isFile && file.name.toLowerCase().endsWith('.bin')) {
+        bin = file;
+        break;
+      }
+    }
+    if (bin == null) {
+      throw Exception('Archive does not contain a .bin firmware');
+    }
+    final content = bin.content;
+    final bytes = content is List<int> ? content : List<int>.from(content as Iterable);
+    await targetFile.writeAsBytes(bytes, flush: true);
   }
 
   int? _contentLength(http.StreamedResponse response, int offset) {

@@ -59,8 +59,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       'papers3' || 'manual' || 'official' || 'no_reset' => 'papers3',
       'generic_esptool' || 'generic' || 'esptool' => 'generic_esptool',
       'lilygo_t5_47' || 'lilygo' || 't5_47' => 'lilygo_t5_47',
-      'auto_reset' || 'usb_reset' => 'auto_reset',
-      'ink_box' || 'inkBox' => 'ink_box',
       // v0.3.6/v0.3.7 stored legacy profiles which still relied on
       // automatic reset. Keep them on the PaperS3-specific path.
       'stable' || 'compatible' => 'papers3',
@@ -156,11 +154,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   String get _flashProfileSummary => switch (_flashProfile) {
-        'generic_esptool' => '通用 ESP32-S3：Android 原生 ESP ROM 烧录链路',
-        'lilygo_t5_47' => 'LilyGo T5 4.7：Android 原生 ESP ROM 烧录链路',
-        'ink_box' => '兼容模式：按 Ink Box 参数验证烧录',
-        'auto_reset' => '自动模式：尝试 USB-JTAG DTR/RTS 复位',
-        _ => 'PaperS3 专用模式：0xFlash 兼容烧录链路',
+        'generic_esptool' => '通用模式：自动探测 ESP32/ESP32-S3 后烧录',
+        'lilygo_t5_47' => 'LilyGo T5：按 4.7 英寸墨水屏设备配置烧录',
+        _ => 'Paper S3：手动进入下载模式后烧录 Vink-PaperS3',
       };
 
   String get _burnModeSummary =>
@@ -190,51 +186,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     setState(() => _baudRate = value ?? 115200),
               ),
               const SizedBox(height: 12),
-              Text('烧录逻辑',
+              Text('烧录模式',
                   style: theme.textTheme.titleSmall
                       ?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 6),
               _BurnModeCard(
                 selected: _flashProfile == 'papers3',
-                title: 'PaperS3 专用模式',
+                title: 'Paper S3',
                 badge: '推荐',
                 description:
-                    '面向 Vink-PaperS3：按 M5Stack 官方方式进入下载模式，并使用 0xFlash 兼容的 ESP ROM 烧录链路。不要用于其他 ESP32 设备。',
+                    '用于 M5Stack PaperS3 / Vink-PaperS3 固件。按提示手动进入下载模式后，使用 0xFlash 兼容链路写入完整固件。',
                 onTap: () => setState(() => _flashProfile = 'papers3'),
               ),
               const SizedBox(height: 6),
               _BurnModeCard(
-                selected: _flashProfile == 'generic_esptool',
-                title: '通用 ESP32-S3 原生模式',
-                badge: '新',
-                description:
-                    '使用 Android 原生 ESP ROM 协议烧录，默认 Generic ESP32-S3 profile，适合已进入下载模式的 ESP32-S3 设备。',
-                onTap: () => setState(() => _flashProfile = 'generic_esptool'),
-              ),
-              const SizedBox(height: 6),
-              _BurnModeCard(
                 selected: _flashProfile == 'lilygo_t5_47',
-                title: 'LilyGo T5 4.7 原生模式',
-                badge: '新',
+                title: 'LilyGo T5',
                 description:
-                    '使用 LilyGo T5 4.7 profile 与 Android 原生 ESP ROM 烧录链路，默认完整镜像从 0x0 写入。',
+                    '用于 LilyGo T5 4.7 英寸墨水屏设备。按 LilyGo T5 配置从 0x0 写入完整镜像。',
                 onTap: () => setState(() => _flashProfile = 'lilygo_t5_47'),
               ),
               const SizedBox(height: 6),
               _BurnModeCard(
-                selected: _flashProfile == 'auto_reset',
-                title: 'PaperS3 自动复位备用',
+                selected: _flashProfile == 'generic_esptool',
+                title: '通用模式',
                 description:
-                    '尝试通过 USB-JTAG DTR/RTS 自动进入下载模式。作为 PaperS3 备用，不推荐给其他设备。',
-                onTap: () => setState(() => _flashProfile = 'auto_reset'),
-              ),
-              const SizedBox(height: 6),
-              _BurnModeCard(
-                selected: _flashProfile == 'ink_box',
-                title: 'Ink Box 对照模式',
-                description:
-                    '按 Ink Box 参数验证：chip auto、default_reset、no-stub、固定 460800。仅用于对照测试。',
-                onTap: () => setState(() => _flashProfile = 'ink_box'),
+                    '用于已经进入下载模式的 ESP32 / ESP32-S3 设备。自动探测芯片后使用通用 ESP ROM 协议烧录。',
+                onTap: () => setState(() => _flashProfile = 'generic_esptool'),
               ),
               const SizedBox(height: 12),
               Text('写入方式',

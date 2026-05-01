@@ -64,8 +64,6 @@ class _FlashScreenState extends State<FlashScreen> {
       'papers3' || 'manual' || 'official' || 'no_reset' => 'papers3',
       'generic_esptool' || 'generic' || 'esptool' => 'generic_esptool',
       'lilygo_t5_47' || 'lilygo' || 't5_47' => 'lilygo_t5_47',
-      'auto_reset' || 'usb_reset' => 'auto_reset',
-      'ink_box' || 'inkBox' => 'ink_box',
       // v0.3.6/v0.3.7 stored legacy profiles which still relied on
       // automatic reset. Keep them on the PaperS3-specific path.
       'stable' || 'compatible' => 'papers3',
@@ -76,14 +74,10 @@ class _FlashScreenState extends State<FlashScreen> {
   String get _burnModeLabel => _burnMode == 'clean' ? '彻底烧录' : '快速烧录';
 
   String get _flashProfileLabel => switch (_flashProfile) {
-        'generic_esptool' => '通用 ESP32-S3 原生模式',
-        'lilygo_t5_47' => 'LilyGo T5 4.7 原生模式',
-        'ink_box' => 'Ink Box 对照模式',
-        'auto_reset' => 'PaperS3 自动复位备用',
-        _ => 'PaperS3 专用模式（0xFlash 兼容）',
+        'generic_esptool' => '通用模式',
+        'lilygo_t5_47' => 'LilyGo T5',
+        _ => 'Paper S3',
       };
-
-  int get _effectiveBaudRate => _flashProfile == 'ink_box' ? 460800 : _baudRate;
 
   bool get _usesNativeGenericEsp =>
       _flashProfile == 'generic_esptool' || _flashProfile == 'lilygo_t5_47';
@@ -304,20 +298,20 @@ class _FlashScreenState extends State<FlashScreen> {
     _addLog('准备烧录: ${widget.firmware.name} ${widget.firmware.version}');
     _addLog('本地文件: $path');
     _addLog('固件大小: ${await File(path).length()} bytes');
-    _addLog('烧录逻辑: $_flashProfileLabel');
+    _addLog('烧录模式: $_flashProfileLabel');
     _addLog(
         '写入方式: $_burnModeLabel, offset=0x${widget.firmware.flashOffset.toRadixString(16)}');
     _addLog(
-        "烧录速度: ${_baudRateLabel(_effectiveBaudRate)}${_flashProfile == 'ink_box' ? '（兼容模式固定）' : ''}");
+        "烧录速度: ${_baudRateLabel(_baudRate)}");
 
     try {
       if (_flashProfile == 'papers3') {
         // PaperS3 手动下载模式会让 USB 设备断开/重新枚举。旧流程在弹窗前
         // 先打开一次串口，随后仍使用进入下载模式前的 deviceName，容易对着
-        // 旧路径同步而卡在 Connecting。PaperS3 专用模式必须先让用户进下载模式，
+        // 旧路径同步而卡在 Connecting。Paper S3 模式必须先让用户进下载模式，
         // 再重新扫描当前 VID:303a/PID:1001 设备并申请权限。
         setState(() => _status = '请让 PaperS3 进入下载模式：长按侧边电源键直到背面红灯闪烁');
-        _addLog('PaperS3 专用模式: 等待用户长按电源键进入下载模式（背面红灯闪烁）');
+        _addLog('Paper S3: 等待用户长按电源键进入下载模式（背面红灯闪烁）');
         final ready = await _confirmPaperS3DownloadMode();
         if (!ready) {
           setState(() => _status = '已取消烧录');
@@ -335,14 +329,14 @@ class _FlashScreenState extends State<FlashScreen> {
 
       _addLog('打开 USB 串口: ${device.label}');
       // 用 Flutter USB 层打开一次当前设备，触发/确认 Android USB 授权。
-      // PaperS3 专用模式随后释放串口，交给 Android 原生烧录后端高速收发；
+      // Paper S3 模式随后释放串口，交给内置烧录后端高速收发；
       // 其他模式释放后交给 Python esptool。
-      await _flasher.connect(device, baudRate: _effectiveBaudRate);
+      await _flasher.connect(device, baudRate: _baudRate);
       await _flasher.close();
       _addLog(_flashProfile == 'papers3'
           ? 'USB 授权已确认，切换到 Android 原生 PaperS3 烧录后端'
           : _usesNativeGenericEsp
-              ? 'USB 授权已确认，切换到 Android 原生通用 ESP 烧录后端'
+              ? 'USB 授权已确认，切换到通用烧录后端'
               : 'USB 授权已确认，切换到通用 esptool 烧录引擎');
 
       if (_flashProfile == 'papers3') {
@@ -355,7 +349,7 @@ class _FlashScreenState extends State<FlashScreen> {
             stage: '启动内置烧录引擎',
           );
         });
-        _addLog('PaperS3 专用模式使用 Android 原生 0xFlash 兼容 ESP ROM 协议烧录');
+        _addLog('Paper S3 使用 0xFlash 兼容 ESP ROM 协议烧录');
         final logSubscription =
             EsptoolService.instance.logs.listen(_handleEsptoolLog);
         final progressSubscription =
@@ -371,7 +365,7 @@ class _FlashScreenState extends State<FlashScreen> {
             deviceName: device.id,
             firmware: File(path),
             flashOffset: widget.firmware.flashOffset,
-            baudRate: _effectiveBaudRate,
+            baudRate: _baudRate,
           );
           if (!mounted) return;
           if (!result.success) {
@@ -391,13 +385,13 @@ class _FlashScreenState extends State<FlashScreen> {
       } else {
         setState(() {
           _status = _usesNativeGenericEsp
-              ? '正在启动 Android 原生通用 ESP 烧录后端'
+              ? '正在启动通用烧录后端'
               : '正在启动通用 esptool 烧录引擎';
           _progress = FlashProgress(
             writtenBytes: 0,
             totalBytes: 100,
             speedBytesPerSecond: 0,
-            stage: _usesNativeGenericEsp ? '启动原生 ESP 烧录后端' : '启动 esptool',
+            stage: _usesNativeGenericEsp ? '启动通用烧录后端' : '启动 esptool',
           );
         });
 
@@ -419,13 +413,13 @@ class _FlashScreenState extends State<FlashScreen> {
                   profileId: _nativeEspProfileId,
                   firmware: File(path),
                   flashOffset: widget.firmware.flashOffset,
-                  baudRate: _effectiveBaudRate,
+                  baudRate: _baudRate,
                 )
               : await EsptoolService.instance.flashFullImage(
                   port: device.id,
                   firmware: File(path),
                   flashOffset: widget.firmware.flashOffset,
-                  baudRate: _effectiveBaudRate,
+                  baudRate: _baudRate,
                   flashProfile: _flashProfile,
                 );
           if (!mounted) return;
@@ -490,7 +484,7 @@ class _FlashScreenState extends State<FlashScreen> {
                   Text('本地文件: ${widget.firmware.localPath ?? '未下载'}'),
                   Text(
                       '固件类型: ${widget.firmware.flashOffset == 0 ? '完整镜像 (0x0)' : 'App 分区 (0x${widget.firmware.flashOffset.toRadixString(16)})'}'),
-                  Text('烧录逻辑: $_flashProfileLabel'),
+                  Text('烧录模式: $_flashProfileLabel'),
                   Text('写入方式: $_burnModeLabel'),
                 ],
               ),
@@ -538,7 +532,7 @@ class _FlashScreenState extends State<FlashScreen> {
                           ),
                         )),
                   Text(
-                      "烧录速度: ${_baudRateLabel(_effectiveBaudRate)}${_flashProfile == 'ink_box' ? '（兼容模式固定）' : ''}"),
+                      "烧录速度: ${_baudRateLabel(_baudRate)}"),
                 ],
               ),
             ),

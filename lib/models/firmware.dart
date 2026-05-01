@@ -1,4 +1,4 @@
-enum FirmwareSource { vink, m5stackOfficial, m5stackCommunity, edcBook, custom }
+enum FirmwareSource { vink, m5stackOfficial, m5stackCommunity, lilyGo, edcBook, custom }
 
 enum HashType { md5, sha256 }
 
@@ -77,6 +77,8 @@ class Firmware {
         return 'M5Stack 官方';
       case FirmwareSource.m5stackCommunity:
         return 'M5Stack 社区';
+      case FirmwareSource.lilyGo:
+        return 'LilyGo';
       case FirmwareSource.edcBook:
         return 'EDC Book';
       case FirmwareSource.custom:

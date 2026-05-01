@@ -165,24 +165,29 @@ class M5BurnerSource {
       if (versions.isEmpty) continue;
       versions.sort((a, b) =>
           _asString(b['published_at']).compareTo(_asString(a['published_at'])));
-      final latest = versions.first;
-      final file = _asString(latest['file']);
-      final version = _asString(latest['version'], fallback: 'latest');
       final description = _asString(item['description']).trim();
-      final changeLog = _asString(latest['change_log']).trim();
       final github = _asString(item['github']).trim();
 
-      results.add(Firmware(
-        id: 'm5burner-${_asString(item['fid']).hashCode}-${file.hashCode}',
-        name: name,
-        version: version,
-        description: _summary(description, 'M5Burner PaperS3 固件'),
-        changelog: changeLog.isEmpty ? description : changeLog,
-        downloadUrl: '$_downloadBase/$file',
-        releaseUrl: github.isEmpty ? null : github,
-        source: FirmwareSource.m5stackCommunity,
-        flashOffset: 0,
-      ));
+      for (final versionItem in versions) {
+        final file = _asString(versionItem['file']);
+        final version = _asString(versionItem['version'], fallback: 'latest');
+        final changeLog = _asString(versionItem['change_log']).trim();
+        final publishedAt = _asString(versionItem['published_at']).trim();
+        results.add(Firmware(
+          id: 'm5burner-${_asString(item['fid']).hashCode}-${version.hashCode}-${file.hashCode}',
+          name: name,
+          version: version,
+          description: _summary(
+            changeLog.isEmpty ? description : changeLog,
+            publishedAt.isEmpty ? 'M5Burner PaperS3 固件' : '发布于 $publishedAt',
+          ),
+          changelog: changeLog.isEmpty ? description : changeLog,
+          downloadUrl: '$_downloadBase/$file',
+          releaseUrl: github.isEmpty ? null : github,
+          source: FirmwareSource.m5stackCommunity,
+          flashOffset: 0,
+        ));
+      }
     }
     return results;
   }
@@ -227,30 +232,34 @@ class LilyGoSource {
     firmwares.sort((a, b) =>
         _asString(b['published_at']).compareTo(_asString(a['published_at'])));
 
-    final latest = firmwares.first;
-    final url = _asString(latest['download_url']).isNotEmpty
-        ? _asString(latest['download_url'])
-        : _asString(latest['oss_url']);
-    final sha256 = _asString(latest['sha256']);
-    final sourceCode = _asString(latest['source_code_url']);
-
-    return [
-      Firmware(
-        id: 'lilygo-$_productId-${_asString(latest['version']).hashCode}-${url.hashCode}',
+    return firmwares.map((item) {
+      final url = _asString(item['download_url']).isNotEmpty
+          ? _asString(item['download_url'])
+          : _asString(item['oss_url']);
+      final sha256 = _asString(item['sha256']);
+      final sourceCode = _asString(item['source_code_url']);
+      final description = _asString(item['description']).trim();
+      final publishedAt = _asString(item['published_at']).trim();
+      return Firmware(
+        id: 'lilygo-$_productId-${_asString(item['version']).hashCode}-${url.hashCode}',
         name: 'LilyGo T5 · $_firmwareName',
-        version: _asString(latest['version'], fallback: 'latest'),
-        description: 'LilyGo T5 4.7 v2.3 社区固件，完整镜像从 0x0 烧录。',
-        changelog: _asString(latest['description'], fallback: '暂无更新说明'),
+        version: _asString(item['version'], fallback: 'latest'),
+        description: description.isEmpty
+            ? 'LilyGo T5 4.7 v2.3 社区固件，完整镜像从 0x0 烧录。'
+            : _summary(description, publishedAt.isEmpty ? 'LilyGo T5 4.7 v2.3 固件' : '发布于 $publishedAt'),
+        changelog: description.isEmpty
+            ? '暂无逐版本更新说明${publishedAt.isEmpty ? '' : ' · 发布于 $publishedAt'}'
+            : description,
         downloadUrl: url,
-        sizeBytes: _asInt(latest['size']),
+        sizeBytes: _asInt(item['size']),
         hash: sha256.isEmpty
             ? null
             : FirmwareHash(type: HashType.sha256, value: sha256),
         releaseUrl: sourceCode.isEmpty ? null : sourceCode,
         source: FirmwareSource.lilyGo,
         flashOffset: 0,
-      ),
-    ];
+      );
+    }).toList();
   }
 }
 

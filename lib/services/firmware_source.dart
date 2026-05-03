@@ -376,7 +376,8 @@ class FirmwareRepository {
       catch (_) { return const <Firmware>[]; }
     }();
 
-    final allResults = await Future.wait([vinkFuture, m5Future(), lilyFuture(), customFuture()]);
+    final allResults = await Future.wait< List<Firmware>>(
+        [vinkFuture, m5Future(), lilyFuture(), customFuture()]);
     for (final batch in allResults) {
       results.addAll(batch);
     }

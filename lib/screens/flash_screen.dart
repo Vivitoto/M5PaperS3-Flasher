@@ -612,13 +612,11 @@ class _FlashScreenState extends State<FlashScreen> {
                   Text('本地文件: ${widget.firmware.localPath ?? '未下载'}'),
                   Text(
                       '固件类型: ${widget.firmware.flashOffset == 0 ? '完整镜像 (0x0)' : 'App 分区 (0x${widget.firmware.flashOffset.toRadixString(16)})'}'),
-                  if (_burnMode == 'fast') [
-                    const Text('写入方式: 快速烧录',
-                        style: TextStyle(color: Colors.white70)),
-                  ] else [
-                    const Text('写入方式: 彻底烧录',
-                        style: TextStyle(color: Colors.white70)),
-                  ],
+                  _burnMode == 'fast'
+                      ? const Text('写入方式: 快速烧录',
+                          style: TextStyle(color: Colors.white70))
+                      : const Text('写入方式: 彻底烧录',
+                          style: TextStyle(color: Colors.white70)),
                 ],
               ),
             ),

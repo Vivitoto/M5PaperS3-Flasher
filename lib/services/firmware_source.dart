@@ -362,7 +362,10 @@ class FirmwareRepository {
     // Vink 官方源结果排在最前，其余按版本号排序。
     final results = <Firmware>[];
 
-    final vinkFuture = _vinkSource.fetchFirmwares();
+    final vinkFuture = () async {
+      try { return await _vinkSource.fetchFirmwares(); }
+      catch (_) { return const <Firmware>[]; }
+    }();
     final m5Future = () async {
       try { return await _m5BurnerSource.fetchFirmwares(); }
       catch (_) { return const <Firmware>[]; }
@@ -376,7 +379,7 @@ class FirmwareRepository {
       catch (_) { return const <Firmware>[]; }
     }();
 
-    final allResults = await Future.wait< List<Firmware>>(
+    final allResults = await Future.wait<List<Firmware>>(
         [vinkFuture, m5Future(), lilyFuture(), customFuture()]);
     for (final batch in allResults) {
       results.addAll(batch);

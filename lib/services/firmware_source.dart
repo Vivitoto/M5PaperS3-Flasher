@@ -367,6 +367,7 @@ class FirmwareRepository {
       catch (_) { return const <Firmware>[]; }
     }();
     final m5Future = () async {
+    // Trigger fresh CI run to bypass any caching issues.
       try { return await _m5BurnerSource.fetchFirmwares(); }
       catch (_) { return const <Firmware>[]; }
     }();

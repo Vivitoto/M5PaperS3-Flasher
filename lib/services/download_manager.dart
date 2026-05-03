@@ -259,16 +259,28 @@ class DownloadManager {
   }
 
   Future<void> _extractBinFromArchive(File archiveFile, File targetFile) async {
-    final archive = ZipDecoder().decodeBytes(await archiveFile.readAsBytes());
+    Archive? archive;
+    try {
+      archive = ZipDecoder().decodeBytes(await archiveFile.readAsBytes());
+    } catch (error) {
+      throw Exception('无法解析 ZIP 压缩包（可能已损坏）: $error');
+    }
     ArchiveFile? bin;
+    ArchiveFile? bestBin;
     for (final file in archive.files) {
       if (file.isFile && file.name.toLowerCase().endsWith('.bin')) {
-        bin = file;
-        break;
+        bestBin = file;
+        // Prefer a file whose name suggests it's the main firmware
+        final lower = file.name.toLowerCase();
+        if (lower.contains('full') || lower.contains('firmware') || lower.contains('app')) {
+          bin = file;
+          break;
+        }
       }
     }
+    bin ??= bestBin;
     if (bin == null) {
-      throw Exception('Archive does not contain a .bin firmware');
+      throw Exception('ZIP 包内未找到 .bin 固件文件');
     }
     final content = bin.content;
     final bytes = content is List<int> ? content : List<int>.from(content as Iterable);

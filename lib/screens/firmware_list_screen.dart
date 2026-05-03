@@ -36,6 +36,10 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
   }
 
   Future<void> _hydrateLocalState(List<Firmware> firmwares) async {
+    // 每次刷新时清空旧数据，避免 Map 持续膨胀。
+    _localStatus.clear();
+    _localPaths.clear();
+    _partialBytes.clear();
     for (final firmware in firmwares) {
       final info = await _downloadManager.localInfo(firmware);
       _localStatus[firmware.id] = info.status;

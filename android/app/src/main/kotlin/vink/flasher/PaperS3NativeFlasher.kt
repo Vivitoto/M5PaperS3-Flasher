@@ -156,6 +156,7 @@ class PaperS3NativeFlasher(
         for (i in 4 until payload.size) payload[i] = 0x55
         var lastError: Throwable? = null
         repeat(10) { attempt ->
+            if (shouldCancel()) throw InterruptedException("Flash cancelled by user")
             try {
                 rx.clear()
                 sendCommand(SYNC, payload)
@@ -201,6 +202,7 @@ class PaperS3NativeFlasher(
         val timeoutMs = max(5000, ((eraseSize * 1000L) / 175000L).toInt() + 15000)
         var lastError: Throwable? = null
         repeat(3) { attempt ->
+            if (shouldCancel()) throw InterruptedException("Flash cancelled by user")
             try {
                 rx.clear()
                 sendCommand(FLASH_BEGIN, out.toByteArray())

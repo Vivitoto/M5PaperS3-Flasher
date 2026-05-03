@@ -358,26 +358,27 @@ class FirmwareRepository {
   final CustomUrlSource _customSource;
 
   Future<List<Firmware>> fetchAllFirmwares() async {
+    // 所有源并行请求，任意源返回空不影响其他源。
+    // Vink 官方源结果排在最前，其余按版本号排序。
     final results = <Firmware>[];
 
-    results.addAll(await _vinkSource.fetchFirmwares());
+    final vinkFuture = _vinkSource.fetchFirmwares();
+    final m5Future = () async {
+      try { return await _m5BurnerSource.fetchFirmwares(); }
+      catch (_) { return const <Firmware>[]; }
+    }();
+    final lilyFuture = () async {
+      try { return await _lilyGoSource.fetchFirmwares(); }
+      catch (_) { return const <Firmware>[]; }
+    }();
+    final customFuture = () async {
+      try { return await _customSource.fetchFirmwares(); }
+      catch (_) { return const <Firmware>[]; }
+    }();
 
-    try {
-      results.addAll(await _m5BurnerSource.fetchFirmwares());
-    } catch (_) {
-      // 第三方云端源失败不影响 Vink 官方固件展示。
-    }
-
-    try {
-      results.addAll(await _lilyGoSource.fetchFirmwares());
-    } catch (_) {
-      // 第三方云端源失败不影响 Vink 官方固件展示。
-    }
-
-    try {
-      results.addAll(await _customSource.fetchFirmwares());
-    } catch (_) {
-      // 自定义源失败不影响 Vink 官方固件展示。
+    final allResults = await Future.wait([vinkFuture, m5Future(), lilyFuture(), customFuture()]);
+    for (final batch in allResults) {
+      results.addAll(batch);
     }
 
     results.sort((a, b) {

@@ -30,7 +30,7 @@ class FlashProgress {
   final double speedBytesPerSecond;
   final String stage;
 
-  double get percent => totalBytes == 0 ? 0 : writtenBytes * 100 / totalBytes;
+  double get percent => totalBytes == 0 ? 0.0 : writtenBytes * 100.0 / totalBytes;
 }
 
 class EspFlasher {
@@ -323,6 +323,7 @@ class EspFlasher {
     await _readCommandResponse(flashDataCommand);
   }
 
+  // arg=0: reboot into app; arg=1: stay in bootloader
   Future<void> flashEnd({bool reboot = true}) async {
     await _sendCommand(flashEndCommand, _u32(reboot ? 0 : 1));
     await _readCommandResponse(flashEndCommand);

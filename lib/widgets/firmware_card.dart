@@ -207,6 +207,11 @@ class _FirmwareVersionPanel extends StatelessWidget {
               _MetaPill(
                   icon: Icons.memory_rounded,
                   text: firmware.flashOffset == 0 ? '完整镜像' : 'App分区'),
+              if (firmware.hash != null)
+                _MetaPill(
+                  icon: Icons.verified_rounded,
+                  text: firmware.hash!.type == HashType.sha256 ? 'SHA-256' : 'MD5',
+                ),
             ],
           ),
           const SizedBox(height: 6),

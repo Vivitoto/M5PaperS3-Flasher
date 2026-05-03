@@ -23,18 +23,21 @@ class _FlashScreenState extends State<FlashScreen> {
   SerialDeviceInfo? _selectedDevice;
   FlashProgress? _progress;
   bool _busy = false;
+  bool _cancelling = false;
   bool _scanning = false;
   String? _status;
   final List<String> _logs = [];
   int _baudRate = 921600;
   String _burnMode = 'fast';
   String _flashProfile = 'papers3';
+  static const String _logPrefsKey = 'flash_screen_logs';
 
   @override
   void initState() {
     super.initState();
     _loadSettings();
     _scanDevices();
+    _loadPersistedLogs();
   }
 
   @override
@@ -50,6 +53,24 @@ class _FlashScreenState extends State<FlashScreen> {
       _burnMode = _normalizeBurnMode(prefs.getString('eraseOption'));
       _flashProfile = _normalizeFlashProfile(prefs.getString('flashProfile'));
     });
+  }
+
+  Future<void> _loadPersistedLogs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getStringList(_logPrefsKey);
+    if (saved != null && saved.isNotEmpty) {
+      setState(() => _logs.addAll(saved));
+    }
+  }
+
+  Future<void> _persistLogs() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_logPrefsKey, _logs.toList());
+  }
+
+  Future<void> _clearPersistedLogs() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_logPrefsKey);
   }
 
   String _normalizeBurnMode(String? value) {
@@ -155,6 +176,8 @@ class _FlashScreenState extends State<FlashScreen> {
       _logs.add('[$time] $message');
       if (_logs.length > 160) _logs.removeRange(0, _logs.length - 160);
     });
+    // Persist asynchronously — don't await to avoid slowing down logging
+    _persistLogs();
   }
 
   void _handleEsptoolLog(String raw) {
@@ -178,7 +201,7 @@ class _FlashScreenState extends State<FlashScreen> {
       builder: (context) => AlertDialog(
         title: const Text('进入 PaperS3 下载模式'),
         content: const Text(
-          '请保持 USB-C OTG 已连接，然后长按 PaperS3 侧边电源键，直到背面状态灯红色闪烁。\n\n红灯闪烁后，再点“已进入下载模式”开始烧录。',
+          '请保持 USB-C OTG 已连接，然后长按 PaperS3 侧边电源键，直到背面状态灯红色闪烁。\n\n红灯闪烁后，再点"已进入下载模式"开始烧录。',
         ),
         actions: [
           TextButton(
@@ -277,6 +300,73 @@ class _FlashScreenState extends State<FlashScreen> {
     }
   }
 
+  /// 取消正在进行的烧录。
+  Future<void> _cancelFlasher() async {
+    if (!_busy || _cancelling) return;
+    setState(() {
+      _cancelling = true;
+      _status = '正在取消烧录...';
+    });
+    _addLog('用户请求取消烧录');
+    try {
+      EsptoolService.instance.cancel();
+      await _flasher.close();
+    } catch (_) {}
+    // Wait a moment for the flasher to process the cancel
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    if (mounted) {
+      setState(() {
+        _busy = false;
+        _cancelling = false;
+        _status = '已取消烧录';
+      });
+      _addLog('烧录已取消');
+    }
+  }
+
+  /// 显示 SYNC/连接失败时的重试对话框。
+  Future<void> _showSyncFailureDialog(String errorMessage) async {
+    final choice = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('连接失败'),
+        content: Text(
+          '无法连接到 ESP32 下载模式。\n\n$errorMessage\n\n'
+          '常见原因：\n'
+          '• 设备未进入下载模式（红灯闪烁）\n'
+          '• USB 授权未允许\n'
+          '• USB 端口已变化，请尝试重新插拔',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop('cancel'),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop('retry'),
+            child: const Text('重试'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop('rescan'),
+            child: const Text('重新扫描 USB'),
+          ),
+        ],
+      ),
+    );
+
+    if (choice == null || !mounted) return;
+
+    if (choice == 'retry') {
+      // Re-run the full flash flow from the top
+      _flash();
+    } else if (choice == 'rescan') {
+      setState(() => _busy = false);
+      await _scanDevices();
+    }
+    // 'cancel' → just return to idle state (already handled by choice == null)
+  }
+
   Future<void> _flash() async {
     var device = _selectedDevice;
     final path = widget.firmware.localPath;
@@ -289,27 +379,25 @@ class _FlashScreenState extends State<FlashScreen> {
       return;
     }
 
+    // Clear logs from any previous attempt in this session
     setState(() {
       _busy = true;
+      _cancelling = false;
       _progress = null;
       _logs.clear();
       _status = '正在打开 USB 串口（如系统询问权限请选择允许）';
     });
+    await _clearPersistedLogs();
     _addLog('准备烧录: ${widget.firmware.name} ${widget.firmware.version}');
     _addLog('本地文件: $path');
     _addLog('固件大小: ${await File(path).length()} bytes');
     _addLog('烧录模式: $_flashProfileLabel');
     _addLog(
         '写入方式: $_burnModeLabel, offset=0x${widget.firmware.flashOffset.toRadixString(16)}');
-    _addLog(
-        "烧录速度: ${_baudRateLabel(_baudRate)}");
+    _addLog("烧录速度: ${_baudRateLabel(_baudRate)}");
 
     try {
       if (_flashProfile == 'papers3') {
-        // PaperS3 手动下载模式会让 USB 设备断开/重新枚举。旧流程在弹窗前
-        // 先打开一次串口，随后仍使用进入下载模式前的 deviceName，容易对着
-        // 旧路径同步而卡在 Connecting。Paper S3 模式必须先让用户进下载模式，
-        // 再重新扫描当前 VID:303a/PID:1001 设备并申请权限。
         setState(() => _status = '请让 PaperS3 进入下载模式：长按侧边电源键直到背面红灯闪烁');
         _addLog('Paper S3: 等待用户长按电源键进入下载模式（背面红灯闪烁）');
         final ready = await _confirmPaperS3DownloadMode();
@@ -328,9 +416,6 @@ class _FlashScreenState extends State<FlashScreen> {
       }
 
       _addLog('打开 USB 串口: ${device.label}');
-      // 用 Flutter USB 层打开一次当前设备，触发/确认 Android USB 授权。
-      // Paper S3 模式随后释放串口，交给内置烧录后端高速收发；
-      // 其他模式释放后交给 Python esptool。
       await _flasher.connect(device, baudRate: _baudRate);
       await _flasher.close();
       _addLog(_flashProfile == 'papers3'
@@ -368,12 +453,36 @@ class _FlashScreenState extends State<FlashScreen> {
             baudRate: _baudRate,
           );
           if (!mounted) return;
+
+          // 检测 SYNC/连接失败，提供重试选项
           if (!result.success) {
-            throw Exception(result.output.isEmpty
+            final output = result.output;
+            final isSyncFailure =
+                output.contains('SYNC') ||
+                output.contains('sync') ||
+                output.contains('Connecting') ||
+                output.contains('timeout') ||
+                output.contains('Timed out');
+            if (isSyncFailure) {
+              await _showSyncFailureDialog(output.isEmpty
+                  ? 'SYNC 超时或连接失败'
+                  : output.split('\n').last);
+              return;
+            }
+            throw Exception(output.isEmpty
                 ? 'Android 原生 PaperS3 烧录失败'
-                : result.output.split('\n').last);
+                : output.split('\n').last);
           }
-          setState(() => _status = '刷写完成，设备正在重启');
+
+          setState(() {
+            _status = '刷写完成，设备正在重启';
+            _progress = const FlashProgress(
+              writtenBytes: 100,
+              totalBytes: 100,
+              speedBytesPerSecond: 0,
+              stage: 'Done — 完成并重启',
+            );
+          });
           _addLog('刷写完成，设备正在重启');
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('刷写完成')),
@@ -423,11 +532,27 @@ class _FlashScreenState extends State<FlashScreen> {
                   flashProfile: _flashProfile,
                 );
           if (!mounted) return;
+
+          // 检测 SYNC/连接失败
           if (!result.success) {
-            throw Exception(result.output.isEmpty
+            final output = result.output;
+            final isSyncFailure =
+                output.contains('SYNC') ||
+                output.contains('sync') ||
+                output.contains('Connecting') ||
+                output.contains('timeout') ||
+                output.contains('Timed out');
+            if (isSyncFailure) {
+              await _showSyncFailureDialog(output.isEmpty
+                  ? 'SYNC 超时或连接失败'
+                  : output.split('\n').last);
+              return;
+            }
+            throw Exception(output.isEmpty
                 ? (_usesNativeGenericEsp ? '原生 ESP 烧录失败' : 'esptool 烧录失败')
-                : result.output.split('\n').last);
+                : output.split('\n').last);
           }
+
           setState(() {
             _status = '刷写完成，设备正在重启';
             _progress = const FlashProgress(
@@ -448,17 +573,20 @@ class _FlashScreenState extends State<FlashScreen> {
       }
     } on TimeoutException {
       if (!mounted) return;
-      setState(() {
-        _status = '未连接到 ESP32 下载模式。请按住设备 BOOT/下载键，再短按 RESET 或重新插入 USB，然后重试。';
-      });
-      _addLog('失败: ESP32 下载模式连接超时');
+      await _showSyncFailureDialog(
+          '连接超时：设备未在预期时间内响应。请确认设备已进入下载模式（红灯闪烁）。');
     } catch (error) {
       if (!mounted) return;
       setState(() => _status = '刷写失败: $error');
       _addLog('失败: $error');
     } finally {
       await _flasher.close();
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _cancelling = false;
+        });
+      }
     }
   }
 
@@ -484,8 +612,13 @@ class _FlashScreenState extends State<FlashScreen> {
                   Text('本地文件: ${widget.firmware.localPath ?? '未下载'}'),
                   Text(
                       '固件类型: ${widget.firmware.flashOffset == 0 ? '完整镜像 (0x0)' : 'App 分区 (0x${widget.firmware.flashOffset.toRadixString(16)})'}'),
-                  Text('烧录模式: $_flashProfileLabel'),
-                  Text('写入方式: $_burnModeLabel'),
+                  if (_burnMode == 'fast') [
+                    const Text('写入方式: 快速烧录',
+                        style: TextStyle(color: Colors.white70)),
+                  ] else [
+                    const Text('写入方式: 彻底烧录',
+                        style: TextStyle(color: Colors.white70)),
+                  ],
                 ],
               ),
             ),
@@ -531,8 +664,7 @@ class _FlashScreenState extends State<FlashScreen> {
                                     setState(() => _selectedDevice = device),
                           ),
                         )),
-                  Text(
-                      "烧录速度: ${_baudRateLabel(_baudRate)}"),
+                  Text("烧录速度: ${_baudRateLabel(_baudRate)}"),
                 ],
               ),
             ),
@@ -608,19 +740,30 @@ class _FlashScreenState extends State<FlashScreen> {
             ),
             const SizedBox(height: 12),
           ],
-          FilledButton.icon(
-            onPressed: _busy ? null : _flash,
-            icon: _busy
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.flash_on),
-            label: const Text('开始刷写'),
-          ),
-          const SizedBox(height: 8),
+          // 烧录中显示取消按钮；否则显示开始刷写按钮
+          if (_busy) ...[
+            OutlinedButton.icon(
+              onPressed: _cancelling ? null : _cancelFlasher,
+              icon: _cancelling
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.cancel_outlined),
+              label: Text(_cancelling ? '取消中...' : '取消烧录'),
+            ),
+            const SizedBox(height: 8),
+          ] else ...[
+            FilledButton.icon(
+              onPressed: _flash,
+              icon: const Icon(Icons.flash_on),
+              label: const Text('开始刷写'),
+            ),
+            const SizedBox(height: 8),
+          ],
           const Text(
-            '提示: PaperS3 官方下载模式是 USB 连接后长按侧边电源键，直到背面状态灯红色闪烁。推荐使用“官方模式”；若一直卡在 Connecting，请确认红灯正在闪烁后再点确认。',
+            '提示: PaperS3 官方下载模式是 USB 连接后长按侧边电源键，直到背面状态灯红色闪烁。推荐使用"官方模式"；若一直卡在 Connecting，请确认红灯正在闪烁后再点确认。',
             style: TextStyle(color: Colors.white54),
           ),
         ],

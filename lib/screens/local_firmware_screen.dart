@@ -445,6 +445,11 @@ class _LocalFirmwareCard extends StatelessWidget {
                         : 'Offset 0x${firmware.flashOffset.toRadixString(16)}'),
                 _MetaPill(
                     icon: Icons.cloud_outlined, text: firmware.sourceLabel),
+                if (firmware.hash != null)
+                  _MetaPill(
+                    icon: Icons.verified_rounded,
+                    text: firmware.hash!.type == HashType.sha256 ? 'SHA-256' : 'MD5',
+                  ),
               ],
             ),
             const SizedBox(height: 6),

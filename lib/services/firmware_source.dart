@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -33,7 +34,8 @@ class VinkSource {
 
       final manifest = _asMap(jsonDecode(response.body));
       final device = _asString(manifest['device'], fallback: 'unknown');
-      final firmwareName = _asString(manifest['firmwareName'], fallback: 'Vink-$device');
+      final firmwareName =
+          _asString(manifest['firmwareName'], fallback: 'Vink-$device');
       final releases = _asList(manifest['releases']).map(_asMap);
 
       for (final release in releases) {
@@ -57,7 +59,8 @@ class VinkSource {
           id: 'vink-$device-$version-${assetName.hashCode}',
           name: firmwareName,
           version: version,
-          description: summary.isEmpty ? _summary(changelog, releaseName) : summary,
+          description:
+              summary.isEmpty ? _summary(changelog, releaseName) : summary,
           changelog: changelog.isEmpty ? '暂无更新说明' : changelog,
           downloadUrl: downloadUrl,
           sizeBytes: _asInt(asset['size']),
@@ -73,7 +76,8 @@ class VinkSource {
 
   Map<String, dynamic> _asMap(Object? value) {
     if (value is Map<String, dynamic>) return value;
-    if (value is Map) return value.map((key, value) => MapEntry(key.toString(), value));
+    if (value is Map)
+      return value.map((key, value) => MapEntry(key.toString(), value));
     return <String, dynamic>{};
   }
 
@@ -102,7 +106,10 @@ class VinkSource {
 
   Map<String, dynamic>? _selectFlashAsset(Map<String, dynamic> assets) {
     // App 默认烧录完整包。旧历史版本如果没有 full，只作为历史说明兼容回退。
-    final preferred = assets['full'] ?? assets['factory'] ?? assets['complete'] ?? assets['ota'];
+    final preferred = assets['full'] ??
+        assets['factory'] ??
+        assets['complete'] ??
+        assets['ota'];
     if (preferred is Map) return _asMap(preferred);
     for (final value in assets.values) {
       if (value is Map) return _asMap(value);
@@ -120,8 +127,6 @@ class VinkSource {
   }
 }
 
-
-
 /// M5Burner 云端固件源。
 ///
 /// 过滤规则来自 ink-box APK 内置 assets/config/firmware_filter.json：只展示
@@ -129,7 +134,8 @@ class VinkSource {
 class M5BurnerSource {
   static const String _apiUrl =
       'http://m5burner-api-fc-hk-cdn.m5stack.com/api/firmware';
-  static const String _downloadBase = 'https://m5burner-cdn.m5stack.com/firmware';
+  static const String _downloadBase =
+      'https://m5burner-cdn.m5stack.com/firmware';
   static const List<String> _allowedNames = [
     '墨阅书匣 | MoYue',
     '阅读卡片 | EDC Book',
@@ -144,9 +150,9 @@ class M5BurnerSource {
   M5BurnerSource({http.Client? client}) : _client = client ?? http.Client();
 
   Future<List<Firmware>> fetchFirmwares() async {
-    final response = await _client
-        .get(Uri.parse(_apiUrl), headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+    final response = await _client.get(Uri.parse(_apiUrl), headers: {
+      'Accept': 'application/json'
+    }).timeout(const Duration(seconds: 8));
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception('M5Burner 固件清单请求失败: ${response.statusCode}');
     }
@@ -208,16 +214,18 @@ class LilyGoSource {
   LilyGoSource({http.Client? client}) : _client = client ?? http.Client();
 
   Future<List<Firmware>> fetchFirmwares() async {
-    final response = await _client
-        .get(Uri.parse(_manifestUrl), headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 8));
+    final response = await _client.get(Uri.parse(_manifestUrl), headers: {
+      'Accept': 'application/json'
+    }).timeout(const Duration(seconds: 8));
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception('LilyGo 固件清单请求失败: ${response.statusCode}');
     }
 
     final manifest = _asMap(jsonDecode(response.body));
-    final firmwares = _asList(manifest['firmware_list']).map(_asMap).where((item) {
-      final productIds = _asList(item['supported_product_ids']).map(_asString).toSet();
+    final firmwares =
+        _asList(manifest['firmware_list']).map(_asMap).where((item) {
+      final productIds =
+          _asList(item['supported_product_ids']).map(_asString).toSet();
       final name = _asString(item['name']);
       final type = _asString(item['type']);
       final url = _asString(item['download_url']).isNotEmpty
@@ -246,7 +254,11 @@ class LilyGoSource {
         version: _asString(item['version'], fallback: 'latest'),
         description: description.isEmpty
             ? 'LilyGo T5 4.7 v2.3 社区固件，完整镜像从 0x0 烧录。'
-            : _summary(description, publishedAt.isEmpty ? 'LilyGo T5 4.7 v2.3 固件' : '发布于 $publishedAt'),
+            : _summary(
+                description,
+                publishedAt.isEmpty
+                    ? 'LilyGo T5 4.7 v2.3 固件'
+                    : '发布于 $publishedAt'),
         changelog: description.isEmpty
             ? '暂无逐版本更新说明${publishedAt.isEmpty ? '' : ' · 发布于 $publishedAt'}'
             : description,
@@ -265,7 +277,8 @@ class LilyGoSource {
 
 Map<String, dynamic> _asMap(Object? value) {
   if (value is Map<String, dynamic>) return value;
-  if (value is Map) return value.map((key, value) => MapEntry(key.toString(), value));
+  if (value is Map)
+    return value.map((key, value) => MapEntry(key.toString(), value));
   return <String, dynamic>{};
 }
 
@@ -313,10 +326,12 @@ class CustomUrlSource {
       return const <Firmware>[];
     }
 
-    final fileName = uri.pathSegments.isEmpty ? 'firmware.bin' : uri.pathSegments.last;
+    final fileName =
+        uri.pathSegments.isEmpty ? 'firmware.bin' : uri.pathSegments.last;
     final lower = fileName.toLowerCase();
-    final versionMatch = RegExp(r'v\d+(?:[._-]\d+)*(?:[-_][a-z0-9]+)*', caseSensitive: false)
-        .firstMatch(fileName);
+    final versionMatch =
+        RegExp(r'v\d+(?:[._-]\d+)*(?:[-_][a-z0-9]+)*', caseSensitive: false)
+            .firstMatch(fileName);
     final isLikelyFull = lower.contains('full') ||
         lower.contains('factory') ||
         lower.contains('complete') ||
@@ -358,29 +373,42 @@ class FirmwareRepository {
   final CustomUrlSource _customSource;
 
   Future<List<Firmware>> fetchAllFirmwares() async {
-    // 所有源并行请求，任意源返回空不影响其他源。
-    // Vink 官方源结果排在最前，其余按版本号排序。
-    final results = <Firmware>[];
+    // 所有源并行请求；单个源慢/失败不能卡住整个固件库。
+    final allResults = await Future.wait<List<Firmware>>([
+      _safeFetch(_vinkSource.fetchFirmwares),
+      _safeFetch(_m5BurnerSource.fetchFirmwares),
+      _safeFetch(_lilyGoSource.fetchFirmwares),
+      _safeFetch(_customSource.fetchFirmwares,
+          timeout: const Duration(seconds: 3)),
+    ]);
 
-    final vinkFuture = _vinkSource.fetchFirmwares();
-    final m5Future = _m5BurnerSource.fetchFirmwares();
-    final lilyFuture = _lilyGoSource.fetchFirmwares();
-    final customFuture = _customSource.fetchFirmwares();
-
-    final allResults = await Future.wait(
-        [vinkFuture, m5Future, lilyFuture, customFuture]
-    ).catchError((_) => <List<Firmware>>[]);
-
-    for (final batch in allResults) {
-      results.addAll(batch);
-    }
+    final results = <Firmware>[
+      for (final batch in allResults) ...batch,
+    ];
 
     results.sort((a, b) {
-      if (a.source == FirmwareSource.vink && b.source != FirmwareSource.vink) return -1;
-      if (a.source != FirmwareSource.vink && b.source == FirmwareSource.vink) return 1;
+      if (a.source == FirmwareSource.vink && b.source != FirmwareSource.vink) {
+        return -1;
+      }
+      if (a.source != FirmwareSource.vink && b.source == FirmwareSource.vink) {
+        return 1;
+      }
       return _compareVersions(b.version, a.version);
     });
     return results;
+  }
+
+  Future<List<Firmware>> _safeFetch(
+    Future<List<Firmware>> Function() fetch, {
+    Duration timeout = const Duration(seconds: 8),
+  }) async {
+    try {
+      return await fetch().timeout(timeout);
+    } on TimeoutException {
+      return const <Firmware>[];
+    } catch (_) {
+      return const <Firmware>[];
+    }
   }
 
   int _compareVersions(String a, String b) {
@@ -396,6 +424,9 @@ class FirmwareRepository {
   }
 
   List<int> _versionParts(String version) {
-    return RegExp(r'\d+').allMatches(version).map((match) => int.parse(match.group(0)!)).toList();
+    return RegExp(r'\d+')
+        .allMatches(version)
+        .map((match) => int.parse(match.group(0)!))
+        .toList();
   }
 }

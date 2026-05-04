@@ -202,10 +202,13 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
         future: _future,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return _LoadingFirmwareList(onRefresh: _refresh);
           }
           if (snapshot.hasError) {
-            return Center(child: Text('加载失败: ${snapshot.error}'));
+            return _FirmwareLoadFailed(
+              message: '固件列表暂时不可用',
+              onRefresh: _refresh,
+            );
           }
           final firmwares = snapshot.data ?? const <Firmware>[];
           final filters = _deviceFilters(firmwares);
@@ -243,9 +246,9 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
                   ),
                 ),
                 if (firmwares.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Center(child: Text('暂无可用 Vink 固件，请稍后刷新')),
+                  _FirmwareLoadFailed(
+                    message: '没有加载到固件',
+                    onRefresh: _refresh,
                   )
                 else if (filtered.isEmpty)
                   const Padding(
@@ -283,6 +286,82 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _LoadingFirmwareList extends StatelessWidget {
+  const _LoadingFirmwareList({required this.onRefresh});
+
+  final Future<void> Function() onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(14, 20, 14, 96),
+        children: const [
+          VinkGlassCard(
+            padding: EdgeInsets.all(18),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2.5),
+                ),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    '正在加载固件列表...',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: 10),
+          Text(
+            '如果一直停在这里，下拉或点右上角刷新。',
+            style: TextStyle(color: VinkColors.muted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FirmwareLoadFailed extends StatelessWidget {
+  const _FirmwareLoadFailed({required this.message, required this.onRefresh});
+
+  final String message;
+  final Future<void> Function() onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    return VinkGlassCard(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        children: [
+          const Icon(Icons.wifi_off_rounded, color: VinkColors.amber, size: 30),
+          const SizedBox(height: 8),
+          Text(message, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          const Text(
+            '检查网络后刷新，已下载固件可在“烧录”页使用。',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: VinkColors.muted),
+          ),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: onRefresh,
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('刷新'),
+          ),
+        ],
       ),
     );
   }

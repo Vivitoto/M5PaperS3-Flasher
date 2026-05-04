@@ -1,0 +1,124 @@
+name: Build Vink Flasher APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+
+      - name: Setup Python for Chaquopy
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Fix Android local.properties
+        run: |
+          FLUTTER_SDK=$(which flutter | sed 's|/bin/flutter||')
+          echo "flutter.sdk=$FLUTTER_SDK" > android/local.properties
+          cat android/local.properties
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Restore release signing key
+        env:
+          INK_FLASHER_KEYSTORE_B64: ${{ secrets.INK_FLASHER_KEYSTORE_B64 }}
+        run: |
+          mkdir -p android/app/keystore
+          test -n "$INK_FLASHER_KEYSTORE_B64"
+          echo "$INK_FLASHER_KEYSTORE_B64" | base64 -d > android/app/keystore/release.keystore
+
+      - name: Build APK
+        env:
+          INK_FLASHER_STORE_PASSWORD: ${{ secrets.INK_FLASHER_STORE_PASSWORD }}
+          INK_FLASHER_KEY_ALIAS: ${{ secrets.INK_FLASHER_KEY_ALIAS }}
+          INK_FLASHER_KEY_PASSWORD: ${{ secrets.INK_FLASHER_KEY_PASSWORD }}
+        run: flutter build apk --release
+
+      - name: Rename APK
+        run: |
+          mkdir -p output
+          VERSION=$(grep -E '^[[:space:]]*def appVersionName' android/app/build.gradle | sed -E 's/.*"([^"]+)".*/\1/')
+          VERSION_SUFFIX=$(echo "$VERSION" | sed -E 's/[^A-Za-z0-9]+/_/g; s/^_+|_+$//g')
+          cp build/app/outputs/flutter-apk/app-release.apk "output/vink-flasher-v${VERSION_SUFFIX}.apk"
+
+      - name: Sign APK with apksigner
+        env:
+          INK_FLASHER_STORE_PASSWORD: ${{ secrets.INK_FLASHER_STORE_PASSWORD }}
+          INK_FLASHER_KEY_ALIAS: ${{ secrets.INK_FLASHER_KEY_ALIAS }}
+          INK_FLASHER_KEY_PASSWORD: ${{ secrets.INK_FLASHER_KEY_PASSWORD }}
+        run: |
+          BUILD_TOOLS=$(ls -d $ANDROID_SDK_ROOT/build-tools/* | sort -V | tail -1)
+          $BUILD_TOOLS/apksigner sign \
+            --ks android/app/keystore/release.keystore \
+            --ks-pass pass:$INK_FLASHER_STORE_PASSWORD \
+            --key-pass pass:$INK_FLASHER_KEY_PASSWORD \
+            --ks-key-alias $INK_FLASHER_KEY_ALIAS \
+            output/vink-flasher-v*.apk
+
+      - name: Verify APK signature
+        run: |
+          BUILD_TOOLS=$(ls -d $ANDROID_SDK_ROOT/build-tools/* | sort -V | tail -1)
+          $BUILD_TOOLS/apksigner verify -v output/vink-flasher-v*.apk
+
+      - name: Remove old APK assets from latest release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view latest >/dev/null 2>&1; then
+            gh release view latest --json assets --jq '.assets[].name | select(endswith(".apk"))' | while read -r asset; do
+              if [ -n "$asset" ]; then
+                gh release delete-asset latest "$asset" --yes
+              fi
+            done
+          fi
+
+      - name: Release APK to GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Vink Flasher (latest)
+          body: |
+            Vink Flasher - Vink 系列固件烧录工具
+            - Vink 官方固件列表
+            - USB 串口一键烧录
+            - 当前支持 Vink-PaperS3，后续可扩展更多设备
+          files: output/vink-flasher-v*.apk
+          overwrite_files: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Archive APK to history release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-history
+          name: Vink Flasher APK History
+          body_path: apk-history/README.md
+          files: output/vink-flasher-v*.apk
+          overwrite_files: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

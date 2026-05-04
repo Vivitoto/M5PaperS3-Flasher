@@ -458,16 +458,14 @@ class _FlashScreenState extends State<FlashScreen> {
           // 检测 SYNC/连接失败，提供重试选项
           if (!result.success) {
             final output = result.output;
-            final isSyncFailure =
-                output.contains('SYNC') ||
+            final isSyncFailure = output.contains('SYNC') ||
                 output.contains('sync') ||
                 output.contains('Connecting') ||
                 output.contains('timeout') ||
                 output.contains('Timed out');
             if (isSyncFailure) {
-              await _showSyncFailureDialog(output.isEmpty
-                  ? 'SYNC 超时或连接失败'
-                  : output.split('\n').last);
+              await _showSyncFailureDialog(
+                  output.isEmpty ? 'SYNC 超时或连接失败' : output.split('\n').last);
               return;
             }
             throw Exception(output.isEmpty
@@ -494,9 +492,8 @@ class _FlashScreenState extends State<FlashScreen> {
         }
       } else {
         setState(() {
-          _status = _usesNativeGenericEsp
-              ? '正在启动通用烧录后端'
-              : '正在启动通用 esptool 烧录引擎';
+          _status =
+              _usesNativeGenericEsp ? '正在启动通用烧录后端' : '正在启动通用 esptool 烧录引擎';
           _progress = FlashProgress(
             writtenBytes: 0,
             totalBytes: 100,
@@ -537,16 +534,14 @@ class _FlashScreenState extends State<FlashScreen> {
           // 检测 SYNC/连接失败
           if (!result.success) {
             final output = result.output;
-            final isSyncFailure =
-                output.contains('SYNC') ||
+            final isSyncFailure = output.contains('SYNC') ||
                 output.contains('sync') ||
                 output.contains('Connecting') ||
                 output.contains('timeout') ||
                 output.contains('Timed out');
             if (isSyncFailure) {
-              await _showSyncFailureDialog(output.isEmpty
-                  ? 'SYNC 超时或连接失败'
-                  : output.split('\n').last);
+              await _showSyncFailureDialog(
+                  output.isEmpty ? 'SYNC 超时或连接失败' : output.split('\n').last);
               return;
             }
             throw Exception(output.isEmpty
@@ -574,8 +569,7 @@ class _FlashScreenState extends State<FlashScreen> {
       }
     } on TimeoutException {
       if (!mounted) return;
-      await _showSyncFailureDialog(
-          '连接超时：设备未在预期时间内响应。请确认设备已进入下载模式（红灯闪烁）。');
+      await _showSyncFailureDialog('连接超时：设备未在预期时间内响应。请确认设备已进入下载模式（红灯闪烁）。');
     } catch (error) {
       if (!mounted) return;
       setState(() => _status = '刷写失败: $error');
@@ -602,13 +596,6 @@ class _FlashScreenState extends State<FlashScreen> {
         body: ListView(
           padding: const EdgeInsets.fromLTRB(14, 8, 14, 28),
           children: [
-            const VinkHeroHeader(
-              eyebrow: 'Flash Console',
-              title: '写入完整固件',
-              subtitle: '确认 USB 设备、下载模式和烧录速度后开始写入；日志会保留，方便失败时复盘。',
-              icon: Icons.flash_on_rounded,
-            ),
-            const SizedBox(height: 12),
             VinkGlassCard(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -645,26 +632,11 @@ class _FlashScreenState extends State<FlashScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    '本地文件',
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      color: VinkColors.muted,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  SelectableText(
-                    widget.firmware.localPath ?? '未下载',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: VinkColors.text,
-                      fontFamily: 'monospace',
-                      height: 1.35,
-                    ),
-                  ),
                   const SizedBox(height: 10),
                   Text(
-                    '写入方式：${_burnMode == 'fast' ? '快速烧录' : '彻底烧录'} · $_flashProfileLabel · ${_baudRateLabel(_baudRate)}',
+                    '${_burnMode == 'fast' ? '快速烧录' : '彻底烧录'} · $_flashProfileLabel · ${_baudRateLabel(_baudRate)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: VinkColors.muted,
                       height: 1.3,
@@ -683,7 +655,7 @@ class _FlashScreenState extends State<FlashScreen> {
                     children: [
                       Expanded(
                         child: Text(
-                          'USB 设备',
+                          '选择设备',
                           style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w900,
                           ),
@@ -695,7 +667,8 @@ class _FlashScreenState extends State<FlashScreen> {
                             ? const SizedBox(
                                 width: 20,
                                 height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
                               )
                             : const Icon(Icons.refresh_rounded),
                       ),
@@ -703,7 +676,8 @@ class _FlashScreenState extends State<FlashScreen> {
                   ),
                   const SizedBox(height: 2),
                   if (_devices.isEmpty)
-                    const Text('无设备', style: TextStyle(color: VinkColors.muted))
+                    const Text('连接设备后点刷新',
+                        style: TextStyle(color: VinkColors.muted))
                   else
                     ..._devices.map(
                       (device) => Container(
@@ -776,57 +750,57 @@ class _FlashScreenState extends State<FlashScreen> {
                 ),
               ),
             if (_logs.isNotEmpty) ...[
-              VinkGlassCard(
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+              ExpansionTile(
+                tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+                title: Text('烧录日志', style: theme.textTheme.titleSmall),
+                subtitle: Text(
+                  '${_logs.length} 条记录',
+                  style: const TextStyle(color: VinkColors.muted),
+                ),
+                children: [
+                  VinkGlassCard(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: Text(
-                            '烧录日志',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w900,
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: _busy
+                                ? null
+                                : () async {
+                                    setState(_logs.clear);
+                                    await _clearPersistedLogs();
+                                  },
+                            child: const Text('清空'),
+                          ),
+                        ),
+                        Container(
+                          constraints: const BoxConstraints(maxHeight: 220),
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xCC05070B),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: VinkColors.lineSoft),
+                          ),
+                          child: SingleChildScrollView(
+                            reverse: true,
+                            child: SelectableText(
+                              _logs.join('\n'),
+                              style: const TextStyle(
+                                fontSize: 11,
+                                height: 1.35,
+                                color: VinkColors.muted,
+                                fontFamily: 'monospace',
+                              ),
                             ),
                           ),
                         ),
-                        TextButton(
-                          onPressed: _busy
-                              ? null
-                              : () async {
-                                  setState(_logs.clear);
-                                  await _clearPersistedLogs();
-                                },
-                          child: const Text('清空'),
-                        ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    Container(
-                      constraints: const BoxConstraints(maxHeight: 220),
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xCC05070B),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: VinkColors.lineSoft),
-                      ),
-                      child: SingleChildScrollView(
-                        reverse: true,
-                        child: SelectableText(
-                          _logs.join('\n'),
-                          style: const TextStyle(
-                            fontSize: 11,
-                            height: 1.35,
-                            color: VinkColors.muted,
-                            fontFamily: 'monospace',
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
               const SizedBox(height: 12),
             ],
@@ -852,7 +826,7 @@ class _FlashScreenState extends State<FlashScreen> {
               const SizedBox(height: 8),
             ],
             const Text(
-              '提示: PaperS3 官方下载模式是 USB 连接后长按侧边电源键，直到背面状态灯红色闪烁。推荐使用"官方模式"；若一直卡在 Connecting，请确认红灯正在闪烁后再点确认。',
+              'PaperS3：USB 连接后长按侧边电源键，背面红灯闪烁后再开始。',
               style: TextStyle(color: VinkColors.muted),
             ),
           ],

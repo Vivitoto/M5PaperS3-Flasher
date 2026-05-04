@@ -60,11 +60,9 @@ class FirmwareCard extends StatelessWidget {
                           height: 1.15,
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 3),
                       Text(
-                        latest.description,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                        latest.version,
                         style: theme.textTheme.bodySmall
                             ?.copyWith(color: VinkColors.muted),
                       ),
@@ -79,7 +77,7 @@ class FirmwareCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             _FirmwareVersionPanel(
               firmware: latest,
               title: '最新版本',
@@ -103,8 +101,8 @@ class FirmwareCard extends StatelessWidget {
                       style: theme.textTheme.titleSmall
                           ?.copyWith(fontWeight: FontWeight.w800)),
                   subtitle: Text('${history.length} 个历史版本',
-                      style:
-                          const TextStyle(color: VinkColors.muted, fontSize: 11)),
+                      style: const TextStyle(
+                          color: VinkColors.muted, fontSize: 11)),
                   children: [
                     for (final item in history) ...[
                       _FirmwareVersionPanel(
@@ -204,39 +202,18 @@ class _FirmwareVersionPanel extends StatelessWidget {
                     size: 18, color: VinkColors.cyan),
             ],
           ),
-          const SizedBox(height: 5),
-          Wrap(
-            spacing: 5,
-            runSpacing: 4,
-            children: [
-              _MetaPill(icon: Icons.tag_rounded, text: firmware.version),
-              _MetaPill(
-                  icon: Icons.sd_storage_outlined, text: firmware.sizeLabel),
-              _MetaPill(
-                  icon: Icons.memory_rounded,
-                  text: firmware.flashOffset == 0 ? '完整镜像' : 'App分区'),
-              if (firmware.hash != null)
-                _MetaPill(
-                  icon: Icons.verified_rounded,
-                  text: firmware.hash!.type == HashType.sha256 ? 'SHA-256' : 'MD5',
-                ),
-            ],
+          const SizedBox(height: 4),
+          Text(
+            '${firmware.sizeLabel} · ${firmware.flashOffset == 0 ? '完整镜像' : 'App分区'}',
+            style: theme.textTheme.bodySmall?.copyWith(color: VinkColors.muted),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 5),
           _LocalStatusLine(
             status: status,
             partialBytes: partialBytes,
             totalBytes: firmware.sizeBytes,
           ),
-          const SizedBox(height: 4),
-          _ChangelogTile(
-            title: '说明 / 更新',
-            subtitle: firmware.description,
-            changelog: firmware.changelog,
-            initiallyExpanded: expanded,
-            dense: true,
-          ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 7),
           if (isDownloading)
             _Downloading(progress: progress)
           else
@@ -289,7 +266,8 @@ class _VersionActions extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 10),
             ),
             onPressed: onDownload,
-            icon: Icon(downloaded ? Icons.refresh_rounded : Icons.download_rounded),
+            icon: Icon(
+                downloaded ? Icons.refresh_rounded : Icons.download_rounded),
             label: Text(downloadLabel),
           ),
         ),
@@ -317,37 +295,6 @@ class _VersionActions extends StatelessWidget {
           ),
         ],
       ],
-    );
-  }
-}
-
-class _MetaPill extends StatelessWidget {
-  const _MetaPill({required this.icon, required this.text});
-
-  final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        color: VinkColors.cyan.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: VinkColors.lineSoft),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 11, color: VinkColors.cyan),
-          const SizedBox(width: 4),
-          Text(text,
-              style: const TextStyle(
-                  fontSize: 10,
-                  color: VinkColors.muted,
-                  fontWeight: FontWeight.w600)),
-        ],
-      ),
     );
   }
 }
@@ -441,73 +388,5 @@ class _LocalStatusLine extends StatelessWidget {
       return '${(value / 1024 / 1024).toStringAsFixed(2)} MB';
     if (value >= 1024) return '${(value / 1024).toStringAsFixed(1)} KB';
     return '$value B';
-  }
-}
-
-class _ChangelogTile extends StatelessWidget {
-  const _ChangelogTile({
-    required this.title,
-    required this.subtitle,
-    required this.changelog,
-    required this.initiallyExpanded,
-    this.dense = false,
-  });
-
-  final String title;
-  final String subtitle;
-  final String changelog;
-  final bool initiallyExpanded;
-  final bool dense;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final text =
-        _plainChangelog(changelog.trim().isEmpty ? subtitle : changelog.trim());
-
-    return Theme(
-      data: theme.copyWith(dividerColor: Colors.transparent),
-      child: ExpansionTile(
-        tilePadding: EdgeInsets.zero,
-        childrenPadding:
-            EdgeInsets.only(left: dense ? 6 : 0, right: 0, bottom: 4),
-        initiallyExpanded: initiallyExpanded,
-        title: Text(
-          title,
-          style: dense
-              ? theme.textTheme.labelLarge
-              : theme.textTheme.titleSmall
-                  ?.copyWith(fontWeight: FontWeight.w700),
-        ),
-        subtitle: subtitle.trim().isNotEmpty
-            ? Text(_plainChangelog(subtitle),
-                maxLines: 1, overflow: TextOverflow.ellipsis)
-            : null,
-        children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              text,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: VinkColors.muted, height: 1.32),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _plainChangelog(String value) {
-    return value
-        .split('\n')
-        .map((line) => line
-            .replaceAll(RegExp(r'^#{1,6}\s*'), '')
-            .replaceAll(RegExp(r'^[-*]\s+'), '• ')
-            .replaceAll(RegExp(r'`([^`]+)`'), r'$1')
-            .replaceAll('**', '')
-            .trimRight())
-        .join('\n')
-        .replaceAll(RegExp(r'\n{3,}'), '\n\n')
-        .trim();
   }
 }

@@ -235,21 +235,18 @@ class _LocalFirmwareScreenState extends State<LocalFirmwareScreen> {
             onRefresh: _refresh,
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(14, 4, 14, 96),
+              padding: const EdgeInsets.fromLTRB(14, 6, 14, 96),
               children: [
-                VinkHeroHeader(
-                  eyebrow: 'Offline Ready',
-                  title: '本地固件与烧录',
-                  subtitle: '离线优先读取已下载镜像，连接 PaperS3 后按步骤进入下载模式并写入完整固件。',
-                  icon: Icons.bolt_rounded,
-                  trailing: VinkPill(
-                    icon: Icons.save_rounded,
-                    text: '${localFirmwares.length} 个本地',
-                    color: VinkColors.amber,
+                Padding(
+                  padding: const EdgeInsets.only(left: 2, bottom: 8),
+                  child: Text(
+                    '${localFirmwares.length} 个本地固件',
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: VinkColors.muted),
                   ),
                 ),
-                const SizedBox(height: 12),
-                _IntroCard(localCount: localFirmwares.length),
                 if (_loadWarning != null) ...[
                   const SizedBox(height: 8),
                   _OfflineLocalNotice(error: _loadWarning!),
@@ -283,51 +280,6 @@ class _LocalFirmwareScreenState extends State<LocalFirmwareScreen> {
   }
 }
 
-class _IntroCard extends StatelessWidget {
-  const _IntroCard({required this.localCount});
-
-  final int localCount;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return VinkGlassCard(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      child: Row(
-          children: [
-            Container(
-              width: 30,
-              height: 30,
-              decoration: BoxDecoration(
-                color: VinkColors.cyan.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(Icons.folder_copy_rounded),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('本地固件与烧录入口',
-                      style: theme.textTheme.titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w800)),
-                  Text(
-                    localCount == 0
-                        ? '先到“固件”页下载需要的版本，然后在这里统一管理和烧录。'
-                        : '已缓存 $localCount 个固件版本，可删除或指定版本烧录。',
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: VinkColors.muted, height: 1.25),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-    );
-  }
-}
-
 class _OfflineLocalNotice extends StatelessWidget {
   const _OfflineLocalNotice({required this.error});
 
@@ -348,7 +300,7 @@ class _OfflineLocalNotice extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '已先加载本地固件；远端更新信息暂时不可用：$error',
+              '远端信息暂不可用，已显示本地固件',
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context)
@@ -371,19 +323,19 @@ class _EmptyLocalFirmware extends StatelessWidget {
     return VinkGlassCard(
       padding: const EdgeInsets.all(22),
       child: Column(
-          children: [
-            const Icon(Icons.inventory_2_outlined,
-                size: 34, color: VinkColors.muted),
-            const SizedBox(height: 6),
-            Text('暂无本地固件', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 4),
-            const Text(
-              '从“固件”页下载最新版或历史版本后，会出现在这里。',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: VinkColors.muted),
-            ),
-          ],
-        ),
+        children: [
+          const Icon(Icons.inventory_2_outlined,
+              size: 34, color: VinkColors.muted),
+          const SizedBox(height: 6),
+          Text('暂无本地固件', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          const Text(
+            '先到“固件库”下载。',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: VinkColors.muted),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -416,144 +368,80 @@ class _LocalFirmwareCard extends StatelessWidget {
     return VinkGlassCard(
       padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
       child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(firmware.name,
+                        style: theme.textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w900)),
+                    const SizedBox(height: 2),
+                    Text(firmware.version,
+                        style: const TextStyle(color: VinkColors.muted)),
+                  ],
+                ),
+              ),
+              VinkPill(
+                icon: complete
+                    ? Icons.check_circle_rounded
+                    : Icons.downloading_rounded,
+                text: complete ? '可烧录' : '未完成',
+                color: complete ? VinkColors.mint : VinkColors.amber,
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${firmware.sizeLabel} · ${firmware.flashOffset == 0 ? '完整镜像' : 'App分区'}',
+            style: theme.textTheme.bodySmall?.copyWith(color: VinkColors.muted),
+          ),
+          const SizedBox(height: 5),
+          _StatusLine(info: info),
+          const SizedBox(height: 8),
+          if (isDownloading)
+            _Downloading(progress: progress)
+          else
             Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(firmware.name,
-                          style: theme.textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w900)),
-                      const SizedBox(height: 2),
-                      Text(firmware.version,
-                          style: const TextStyle(color: VinkColors.muted)),
-                    ],
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                    ),
+                    onPressed: complete ? onFlash : onDownload,
+                    icon: Icon(
+                        complete ? Icons.bolt_rounded : Icons.download_rounded),
+                    label: Text(complete
+                        ? '刷写'
+                        : partial
+                            ? '继续下载'
+                            : '下载'),
                   ),
                 ),
-                VinkPill(
-                  icon: complete
-                      ? Icons.check_circle_rounded
-                      : Icons.downloading_rounded,
-                  text: complete ? '可烧录' : '未完成',
-                  color: complete ? VinkColors.mint : VinkColors.amber,
+                const SizedBox(width: 6),
+                IconButton.filledTonal(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: complete ? '重新下载' : '下载',
+                  onPressed: onDownload,
+                  icon: Icon(complete
+                      ? Icons.refresh_rounded
+                      : Icons.download_rounded),
+                ),
+                const SizedBox(width: 4),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: '删除本地固件',
+                  onPressed: onDelete,
+                  icon: const Icon(Icons.delete_outline_rounded),
                 ),
               ],
             ),
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 5,
-              runSpacing: 4,
-              children: [
-                _MetaPill(
-                    icon: Icons.sd_storage_outlined, text: firmware.sizeLabel),
-                _MetaPill(
-                    icon: Icons.memory_rounded,
-                    text: firmware.flashOffset == 0
-                        ? '完整镜像'
-                        : 'Offset 0x${firmware.flashOffset.toRadixString(16)}'),
-                _MetaPill(
-                    icon: Icons.cloud_outlined, text: firmware.sourceLabel),
-                if (firmware.hash != null)
-                  _MetaPill(
-                    icon: Icons.verified_rounded,
-                    text: firmware.hash!.type == HashType.sha256 ? 'SHA-256' : 'MD5',
-                  ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            _StatusLine(info: info),
-            if (info.filePath != null) ...[
-              const SizedBox(height: 2),
-              _PathTile(path: info.filePath!),
-            ],
-            const SizedBox(height: 6),
-            if (isDownloading)
-              _Downloading(progress: progress)
-            else
-              Row(
-                children: [
-                  Expanded(
-                    child: FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                      ),
-                      onPressed: complete ? onFlash : onDownload,
-                      icon: Icon(complete
-                          ? Icons.bolt_rounded
-                          : Icons.download_rounded),
-                      label: Text(complete
-                          ? '刷写'
-                          : partial
-                              ? '继续下载'
-                              : '下载'),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                      ),
-                      onPressed: onDownload,
-                      icon: Icon(complete
-                          ? Icons.refresh_rounded
-                          : Icons.download_rounded),
-                      label: Text(complete ? '重新下载' : '下载'),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    tooltip: '删除本地固件',
-                    onPressed: onDelete,
-                    icon: const Icon(Icons.delete_outline_rounded),
-                  ),
-                ],
-              ),
-          ],
-        ),
-    );
-  }
-}
-
-
-class _PathTile extends StatelessWidget {
-  const _PathTile({required this.path});
-
-  final String path;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Theme(
-      data: theme.copyWith(dividerColor: Colors.transparent),
-      child: ExpansionTile(
-        tilePadding: EdgeInsets.zero,
-        childrenPadding: const EdgeInsets.only(left: 6, right: 0, bottom: 3),
-        visualDensity: VisualDensity.compact,
-        title: Text('本地路径', style: theme.textTheme.labelLarge),
-        subtitle: Text(
-          path,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.bodySmall
-              ?.copyWith(color: VinkColors.muted, fontFamily: 'monospace'),
-        ),
-        children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              path,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: VinkColors.muted, fontFamily: 'monospace'),
-            ),
-          ),
         ],
       ),
     );
@@ -592,12 +480,12 @@ class _StatusLine extends StatelessWidget {
     final (icon, text, color) = switch (info.status) {
       LocalFirmwareStatus.complete => (
           Icons.check_circle_rounded,
-          '已下载 ${_sizeLabel(info.receivedBytes)}，可直接烧录',
+          '可烧录',
           VinkColors.mint,
         ),
       LocalFirmwareStatus.partial => (
           Icons.downloading_rounded,
-          '已下载 ${_sizeLabel(info.receivedBytes)}${info.totalBytes == null ? '' : ' / ${_sizeLabel(info.totalBytes!)}'}，可继续下载或删除',
+          '未完成，可继续下载',
           VinkColors.cyan,
         ),
       LocalFirmwareStatus.none => (
@@ -624,44 +512,6 @@ class _StatusLine extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-
-  String _sizeLabel(int bytes) {
-    if (bytes >= 1024 * 1024)
-      return '${(bytes / 1024 / 1024).toStringAsFixed(2)} MB';
-    if (bytes >= 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    return '$bytes B';
-  }
-}
-
-class _MetaPill extends StatelessWidget {
-  const _MetaPill({required this.icon, required this.text});
-
-  final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        color: VinkColors.cyan.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: VinkColors.lineSoft),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 11, color: VinkColors.cyan),
-          const SizedBox(width: 4),
-          Text(text,
-              style: const TextStyle(
-                  fontSize: 10,
-                  color: VinkColors.muted,
-                  fontWeight: FontWeight.w600)),
-        ],
-      ),
     );
   }
 }

@@ -156,7 +156,8 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
 
   String _deviceIdOf(Firmware firmware) {
     final text =
-        '${firmware.id} ${firmware.name} ${firmware.description} ${firmware.downloadUrl}'.toLowerCase();
+        '${firmware.id} ${firmware.name} ${firmware.description} ${firmware.downloadUrl}'
+            .toLowerCase();
     if (firmware.source == FirmwareSource.lilyGo ||
         text.contains('lilygo') ||
         text.contains('t5-4-7') ||
@@ -175,7 +176,6 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
         const _DeviceFilter(id: 'lilygo', label: 'LilyGo'),
     ];
   }
-
 
   List<List<Firmware>> _groupFirmwares(List<Firmware> firmwares) {
     final groups = <String, List<Firmware>>{};
@@ -222,20 +222,8 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
             onRefresh: _refresh,
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(14, 4, 14, 96),
+              padding: const EdgeInsets.fromLTRB(14, 6, 14, 96),
               children: [
-                VinkHeroHeader(
-                  eyebrow: 'Vink Firmware',
-                  title: '选择设备固件',
-                  subtitle: '只展示完整 16MB 首刷镜像。下载后可在“烧录”页离线写入，避免半路依赖网络。',
-                  icon: Icons.memory_rounded,
-                  trailing: VinkPill(
-                    icon: Icons.inventory_2_rounded,
-                    text: '${filtered.length} 个版本',
-                    color: VinkColors.mint,
-                  ),
-                ),
-                const SizedBox(height: 12),
                 if (filters.isNotEmpty) ...[
                   _DeviceFilterBar(
                     filters: filters,
@@ -244,6 +232,16 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
                   ),
                   const SizedBox(height: 8),
                 ],
+                Padding(
+                  padding: const EdgeInsets.only(left: 2, bottom: 8),
+                  child: Text(
+                    '${filtered.length} 个版本',
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: VinkColors.muted),
+                  ),
+                ),
                 if (firmwares.isEmpty)
                   const Padding(
                     padding: EdgeInsets.all(24),
@@ -307,7 +305,6 @@ class _DeviceFilterBar extends StatelessWidget {
   final List<_DeviceFilter> filters;
   final String selected;
   final ValueChanged<String> onSelected;
-
 
   @override
   Widget build(BuildContext context) {

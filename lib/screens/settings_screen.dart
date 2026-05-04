@@ -155,13 +155,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   String get _flashProfileSummary => switch (_flashProfile) {
-        'generic_esptool' => '通用模式：自动探测 ESP32/ESP32-S3 后烧录',
-        'lilygo_t5_47' => 'LilyGo T5：按 4.7 英寸墨水屏设备配置烧录',
-        _ => 'Paper S3：手动进入下载模式后烧录 Vink-PaperS3',
+        'generic_esptool' => '通用 ESP32',
+        'lilygo_t5_47' => 'LilyGo T5 4.7',
+        _ => 'PaperS3 推荐',
       };
 
-  String get _burnModeSummary =>
-      _burnMode == 'clean' ? '彻底烧录：按写入范围覆盖完整镜像' : '快速烧录：直接写入完整固件';
+  String get _burnModeSummary => _burnMode == 'clean' ? '彻底烧录' : '快速烧录';
 
   @override
   Widget build(BuildContext context) {
@@ -173,16 +172,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(14, 4, 14, 96),
         children: [
-          const VinkHeroHeader(
-            eyebrow: 'Control Center',
-            title: '烧录偏好设置',
-            subtitle: '把设备类型、写入方式、下载源和 App 更新集中管理；默认保持 PaperS3 的安全推荐配置。',
-            icon: Icons.tune_rounded,
-          ),
-          const SizedBox(height: 12),
           _Section(
             title: '烧录设置',
-            subtitle: '$_flashProfileSummary · $_burnModeSummary',
+            subtitle: '当前：$_flashProfileSummary · $_burnModeSummary',
             children: [
               DropdownButtonFormField<int>(
                 value: _baudRate,
@@ -203,24 +195,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 selected: _flashProfile == 'papers3',
                 title: 'Paper S3',
                 badge: '推荐',
-                description:
-                    '用于 M5Stack PaperS3 / Vink-PaperS3 固件。按提示手动进入下载模式后，使用 0xFlash 兼容链路写入完整固件。',
+                description: 'M5Stack PaperS3 / Vink-PaperS3',
                 onTap: () => setState(() => _flashProfile = 'papers3'),
               ),
               const SizedBox(height: 6),
               _BurnModeCard(
                 selected: _flashProfile == 'lilygo_t5_47',
                 title: 'LilyGo T5',
-                description:
-                    '用于 LilyGo T5 4.7 英寸墨水屏设备。按 LilyGo T5 配置从 0x0 写入完整镜像。',
+                description: 'T5 4.7 英寸设备',
                 onTap: () => setState(() => _flashProfile = 'lilygo_t5_47'),
               ),
               const SizedBox(height: 6),
               _BurnModeCard(
                 selected: _flashProfile == 'generic_esptool',
                 title: '通用模式',
-                description:
-                    '用于已经进入下载模式的 ESP32 / ESP32-S3 设备。自动探测芯片后使用通用 ESP ROM 协议烧录。',
+                description: '已进入下载模式的 ESP32 设备',
                 onTap: () => setState(() => _flashProfile = 'generic_esptool'),
               ),
               const SizedBox(height: 12),
@@ -232,14 +221,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 selected: _burnMode == 'fast',
                 title: '快速烧录',
                 badge: '推荐',
-                description: '不额外清空整颗闪存，直接写入完整固件。适合日常升级、重复烧录 Vink 固件。',
+                description: '日常推荐',
                 onTap: () => setState(() => _burnMode = 'fast'),
               ),
               const SizedBox(height: 6),
               _BurnModeCard(
                 selected: _burnMode == 'clean',
                 title: '彻底烧录',
-                description: '写入完整镜像并覆盖目标写入范围。适合换固件、设备异常或残留数据导致问题。',
+                description: '换固件或异常修复',
                 onTap: () => setState(() => _burnMode = 'clean'),
               ),
             ],
@@ -247,7 +236,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 6),
           _Section(
             title: '固件源',
-            subtitle: '自定义下载地址和 GitHub 访问',
+            subtitle: '高级选项',
             children: [
               TextField(
                 controller: _customUrlController,
@@ -262,7 +251,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 obscureText: true,
                 decoration: const InputDecoration(
                   labelText: 'GitHub 令牌（可选）',
-                  helperText: '私有仓库或 API 限额不足时使用',
+                  helperText: '可选',
                 ),
               ),
             ],
@@ -314,12 +303,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
-              Text(
-                'APK 会保存到系统 Downloads，不再占用应用临时缓存。下载完成后会打开系统安装器；如被拦截，请允许 Vink Flasher 安装未知来源应用。',
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: VinkColors.muted, height: 1.28),
-              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -357,10 +340,15 @@ class _Section extends StatelessWidget {
               style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w900, letterSpacing: -0.25)),
           const SizedBox(height: 4),
-          Text(subtitle,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: VinkColors.muted, height: 1.25)),
-          const SizedBox(height: 14),
+          if (subtitle.isNotEmpty) ...[
+            const SizedBox(height: 3),
+            Text(subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: VinkColors.muted, height: 1.25)),
+          ],
+          const SizedBox(height: 12),
           ...children,
         ],
       ),
@@ -396,7 +384,7 @@ class _BurnModeCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: backgroundColor,
           borderRadius: BorderRadius.circular(16),
@@ -445,10 +433,12 @@ class _BurnModeCard extends StatelessWidget {
                         ),
                     ],
                   ),
-                  const SizedBox(height: 5),
+                  const SizedBox(height: 3),
                   Text(description,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall
-                          ?.copyWith(color: VinkColors.muted, height: 1.28)),
+                          ?.copyWith(color: VinkColors.muted, height: 1.2)),
                 ],
               ),
             ),

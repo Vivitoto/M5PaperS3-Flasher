@@ -1,1 +1,863 @@
-@lib/screens/flash_screen.dart
+import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../models/firmware.dart';
+import '../services/esp_flasher.dart';
+import '../services/esptool_service.dart';
+import '../widgets/vink_chrome.dart';
+
+class FlashScreen extends StatefulWidget {
+  const FlashScreen({super.key, required this.firmware});
+
+  final Firmware firmware;
+
+  @override
+  State<FlashScreen> createState() => _FlashScreenState();
+}
+
+class _FlashScreenState extends State<FlashScreen> {
+  final _flasher = EspFlasher();
+  List<SerialDeviceInfo> _devices = const [];
+  SerialDeviceInfo? _selectedDevice;
+  FlashProgress? _progress;
+  bool _busy = false;
+  bool _cancelling = false;
+  bool _scanning = false;
+  String? _status;
+  final List<String> _logs = [];
+  int _baudRate = 921600;
+  String _burnMode = 'fast';
+  String _flashProfile = 'papers3';
+  static const String _logPrefsKey = 'flash_screen_logs';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+    _scanDevices();
+    _loadPersistedLogs();
+  }
+
+  @override
+  void dispose() {
+    _flasher.close();
+    super.dispose();
+  }
+
+  Future<void> _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _baudRate = prefs.getInt('baudRate') ?? 921600;
+      _burnMode = _normalizeBurnMode(prefs.getString('eraseOption'));
+      _flashProfile = _normalizeFlashProfile(prefs.getString('flashProfile'));
+    });
+  }
+
+  Future<void> _loadPersistedLogs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getStringList(_logPrefsKey);
+    if (saved != null && saved.isNotEmpty) {
+      setState(() => _logs.addAll(saved));
+    }
+  }
+
+  Future<void> _persistLogs() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_logPrefsKey, _logs.toList());
+  }
+
+  Future<void> _clearPersistedLogs() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_logPrefsKey);
+  }
+
+  String _normalizeBurnMode(String? value) {
+    return switch (value) {
+      'clean' || 'all' => 'clean',
+      _ => 'fast',
+    };
+  }
+
+  String _normalizeFlashProfile(String? value) {
+    return switch (value) {
+      'papers3' || 'manual' || 'official' || 'no_reset' => 'papers3',
+      'generic_esptool' || 'generic' || 'esptool' => 'generic_esptool',
+      'lilygo_t5_47' || 'lilygo' || 't5_47' => 'lilygo_t5_47',
+      // v0.3.6/v0.3.7 stored legacy profiles which still relied on
+      // automatic reset. Keep them on the PaperS3-specific path.
+      'stable' || 'compatible' => 'papers3',
+      _ => 'papers3',
+    };
+  }
+
+  String get _burnModeLabel => _burnMode == 'clean' ? '彻底烧录' : '快速烧录';
+
+  String get _flashProfileLabel => switch (_flashProfile) {
+        'generic_esptool' => '通用模式',
+        'lilygo_t5_47' => 'LilyGo T5',
+        _ => 'Paper S3',
+      };
+
+  bool get _usesNativeGenericEsp =>
+      _flashProfile == 'generic_esptool' || _flashProfile == 'lilygo_t5_47';
+
+  String get _nativeEspProfileId => switch (_flashProfile) {
+        'lilygo_t5_47' => 'LILYGO_T5_47',
+        _ => 'GENERIC_ESP32S3',
+      };
+
+  bool _isEspressifUsbSerialJtag(SerialDeviceInfo info) {
+    final device = info.device;
+    final product = (device.productName ?? '').toLowerCase();
+    return (device.vid == 0x303a && device.pid == 0x1001) ||
+        product.contains('usb jtag') ||
+        product.contains('serial/jtag');
+  }
+
+  Future<SerialDeviceInfo> _resolveCurrentDeviceForFlashing(
+    SerialDeviceInfo initial, {
+    required bool preferEspressifBootloader,
+  }) async {
+    final devices = await EspFlasher.listDevices();
+    if (devices.isEmpty) {
+      throw Exception('未发现 USB 设备。请确认 PaperS3 已连接并处于下载模式后点刷新。');
+    }
+
+    SerialDeviceInfo? bySameId;
+    for (final candidate in devices) {
+      if (candidate.id == initial.id) {
+        bySameId = candidate;
+        break;
+      }
+    }
+
+    SerialDeviceInfo? preferred;
+    if (preferEspressifBootloader) {
+      for (final candidate in devices) {
+        if (_isEspressifUsbSerialJtag(candidate)) {
+          preferred = candidate;
+          break;
+        }
+      }
+    }
+
+    final resolved = preferred ?? bySameId ?? devices.first;
+    if (mounted) {
+      setState(() {
+        _devices = devices;
+        _selectedDevice = resolved;
+        _status = '已重新识别 USB 设备，准备打开串口';
+      });
+    }
+    if (resolved.id != initial.id) {
+      _addLog('下载模式后 USB 设备路径已变化: ${initial.id} → ${resolved.id}');
+    }
+    _addLog('当前 USB 设备: ${resolved.label}');
+    return resolved;
+  }
+
+  String _baudRateLabel(int rate) {
+    return switch (rate) {
+      115200 => '115200（稳定）',
+      230400 => '230400（均衡）',
+      460800 => '460800（快速）',
+      921600 => '921600（高速）',
+      _ => '$rate',
+    };
+  }
+
+  void _addLog(String message) {
+    final now = DateTime.now();
+    final time =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
+    setState(() {
+      _logs.add('[$time] $message');
+      if (_logs.length > 160) _logs.removeRange(0, _logs.length - 160);
+    });
+    // Persist asynchronously — don't await to avoid slowing down logging
+    _persistLogs();
+  }
+
+  void _handleEsptoolLog(String raw) {
+    if (!mounted) return;
+    final lines = raw
+        .replaceAll('\r', '\n')
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+    for (final line in lines) {
+      _addLog(line.length > 300 ? '${line.substring(0, 300)}…' : line);
+      _updateProgressFromEsptoolLine(line);
+    }
+  }
+
+  Future<bool> _confirmPaperS3DownloadMode() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('进入 PaperS3 下载模式'),
+        content: const Text(
+          '请保持 USB-C OTG 已连接，然后长按 PaperS3 侧边电源键，直到背面状态灯红色闪烁。\n\n红灯闪烁后，再点"已进入下载模式"开始烧录。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('已进入下载模式'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  void _updateProgressFromEsptoolLine(String line) {
+    final percentMatch = RegExp(r'\((\d+)\s*%\)').firstMatch(line);
+    if (percentMatch != null) {
+      final percent = int.tryParse(percentMatch.group(1) ?? '0') ?? 0;
+      setState(() {
+        _status = '正在写入固件 $percent%';
+        _progress = FlashProgress(
+          writtenBytes: percent,
+          totalBytes: 100,
+          speedBytesPerSecond: 0,
+          stage: '官方 esptool 正在写入固件',
+        );
+      });
+      return;
+    }
+
+    String? stage;
+    if (line.contains('Connecting')) {
+      stage = '正在连接 ESP32 下载模式';
+    } else if (line.contains('Chip is')) {
+      stage = '已识别芯片';
+    } else if (line.contains('Uploading stub') ||
+        line.contains('Running stub')) {
+      stage = '正在启动 esptool 写入助手';
+    } else if (line.contains('Erasing flash') || line.contains('Erase size')) {
+      stage = '正在擦除目标区域';
+    } else if (line.contains('Writing at')) {
+      stage = '正在写入固件';
+    } else if (line.contains('Hash of data verified')) {
+      stage = '写入校验通过';
+    } else if (line.contains('Hard resetting')) {
+      stage = '正在重启设备';
+    }
+
+    if (stage != null) {
+      setState(() {
+        _status = stage;
+        _progress = FlashProgress(
+          writtenBytes: _progress?.writtenBytes ?? 0,
+          totalBytes: 100,
+          speedBytesPerSecond: 0,
+          stage: stage!,
+        );
+      });
+    }
+  }
+
+  Future<void> _scanDevices() async {
+    setState(() => _scanning = true);
+    try {
+      final devices = await EspFlasher.listDevices();
+      if (!mounted) return;
+      String? logMessage;
+      setState(() {
+        _devices = devices;
+        if (devices.isEmpty) {
+          _selectedDevice = null;
+          _status = '未发现 USB 设备，请确认手机支持 OTG，并重新插拔设备后刷新';
+          logMessage = '未发现 USB 设备';
+        } else {
+          final current = _selectedDevice;
+          _selectedDevice = current == null
+              ? devices.first
+              : devices.firstWhere(
+                  (device) => device.id == current.id,
+                  orElse: () => devices.first,
+                );
+          _status = '发现 ${devices.length} 个 USB 设备，首次连接时系统可能会询问权限';
+          logMessage =
+              '发现 ${devices.length} 个 USB 设备: ${_selectedDevice?.label ?? ''}';
+        }
+      });
+      if (logMessage != null) _addLog(logMessage!);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _status = 'USB 扫描失败: $error');
+      _addLog('USB 扫描失败: $error');
+    } finally {
+      if (mounted) setState(() => _scanning = false);
+    }
+  }
+
+  /// 取消正在进行的烧录。
+  Future<void> _cancelFlasher() async {
+    if (!_busy || _cancelling) return;
+    setState(() {
+      _cancelling = true;
+      _status = '正在取消烧录...';
+    });
+    _addLog('用户请求取消烧录');
+    try {
+      EsptoolService.instance.cancel();
+      await _flasher.close();
+    } catch (_) {}
+    // Wait a moment for the flasher to process the cancel
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    if (mounted) {
+      setState(() {
+        _busy = false;
+        _cancelling = false;
+        _status = '已取消烧录';
+      });
+      _addLog('烧录已取消');
+    }
+  }
+
+  /// 显示 SYNC/连接失败时的重试对话框。
+  Future<void> _showSyncFailureDialog(String errorMessage) async {
+    final choice = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('连接失败'),
+        content: Text(
+          '无法连接到 ESP32 下载模式。\n\n$errorMessage\n\n'
+          '常见原因：\n'
+          '• 设备未进入下载模式（红灯闪烁）\n'
+          '• USB 授权未允许\n'
+          '• USB 端口已变化，请尝试重新插拔',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop('cancel'),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop('retry'),
+            child: const Text('重试'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop('rescan'),
+            child: const Text('重新扫描 USB'),
+          ),
+        ],
+      ),
+    );
+
+    if (choice == null || !mounted) return;
+
+    if (choice == 'retry') {
+      // Re-run the full flash flow from the top
+      _flash();
+    } else if (choice == 'rescan') {
+      setState(() => _busy = false);
+      await _scanDevices();
+    }
+    // 'cancel' → just return to idle state (already handled by choice == null)
+  }
+
+  Future<void> _flash() async {
+    var device = _selectedDevice;
+    final path = widget.firmware.localPath;
+    if (device == null) {
+      setState(() => _status = '未选择 USB 串口设备');
+      return;
+    }
+    if (path == null || !await File(path).exists()) {
+      setState(() => _status = '固件尚未下载');
+      return;
+    }
+
+    // Clear logs from any previous attempt in this session
+    setState(() {
+      _busy = true;
+      _cancelling = false;
+      _progress = null;
+      _logs.clear();
+      _status = '正在打开 USB 串口（如系统询问权限请选择允许）';
+    });
+    await _clearPersistedLogs();
+    _addLog('准备烧录: ${widget.firmware.name} ${widget.firmware.version}');
+    _addLog('本地文件: $path');
+    _addLog('固件大小: ${await File(path).length()} bytes');
+    _addLog('烧录模式: $_flashProfileLabel');
+    _addLog(
+        '写入方式: $_burnModeLabel, offset=0x${widget.firmware.flashOffset.toRadixString(16)}');
+    _addLog("烧录速度: ${_baudRateLabel(_baudRate)}");
+
+    try {
+      if (_flashProfile == 'papers3') {
+        setState(() => _status = '请让 PaperS3 进入下载模式：长按侧边电源键直到背面红灯闪烁');
+        _addLog('Paper S3: 等待用户长按电源键进入下载模式（背面红灯闪烁）');
+        final ready = await _confirmPaperS3DownloadMode();
+        if (!ready) {
+          setState(() => _status = '已取消烧录');
+          _addLog('用户取消：未开始烧录');
+          return;
+        }
+        _addLog('用户确认已进入下载模式，重新扫描 Android USB 设备');
+        device = await _resolveCurrentDeviceForFlashing(device,
+            preferEspressifBootloader: true);
+        _addLog('将使用 0xFlash 兼容内置烧录引擎同步当前下载模式端口');
+      } else {
+        device = await _resolveCurrentDeviceForFlashing(device,
+            preferEspressifBootloader: false);
+      }
+
+      _addLog('打开 USB 串口: ${device.label}');
+      await _flasher.connect(device, baudRate: _baudRate);
+      await _flasher.close();
+      _addLog(_flashProfile == 'papers3'
+          ? 'USB 授权已确认，切换到 Android 原生 PaperS3 烧录后端'
+          : _usesNativeGenericEsp
+              ? 'USB 授权已确认，切换到通用烧录后端'
+              : 'USB 授权已确认，切换到通用 esptool 烧录引擎');
+
+      if (_flashProfile == 'papers3') {
+        setState(() {
+          _status = '正在启动 0xFlash 兼容烧录引擎';
+          _progress = FlashProgress(
+            writtenBytes: 0,
+            totalBytes: 100,
+            speedBytesPerSecond: 0,
+            stage: '启动内置烧录引擎',
+          );
+        });
+        _addLog('Paper S3 使用 0xFlash 兼容 ESP ROM 协议烧录');
+        final logSubscription =
+            EsptoolService.instance.logs.listen(_handleEsptoolLog);
+        final progressSubscription =
+            EsptoolService.instance.paperS3Progress.listen((progress) {
+          if (!mounted) return;
+          setState(() {
+            _progress = progress;
+            _status = progress.stage;
+          });
+        });
+        try {
+          final result = await EsptoolService.instance.flashPaperS3Native(
+            deviceName: device.id,
+            firmware: File(path),
+            flashOffset: widget.firmware.flashOffset,
+            baudRate: _baudRate,
+          );
+          if (!mounted) return;
+
+          // 检测 SYNC/连接失败，提供重试选项
+          if (!result.success) {
+            final output = result.output;
+            final isSyncFailure =
+                output.contains('SYNC') ||
+                output.contains('sync') ||
+                output.contains('Connecting') ||
+                output.contains('timeout') ||
+                output.contains('Timed out');
+            if (isSyncFailure) {
+              await _showSyncFailureDialog(output.isEmpty
+                  ? 'SYNC 超时或连接失败'
+                  : output.split('\n').last);
+              return;
+            }
+            throw Exception(output.isEmpty
+                ? 'Android 原生 PaperS3 烧录失败'
+                : output.split('\n').last);
+          }
+
+          setState(() {
+            _status = '刷写完成，设备正在重启';
+            _progress = const FlashProgress(
+              writtenBytes: 100,
+              totalBytes: 100,
+              speedBytesPerSecond: 0,
+              stage: 'Done — 完成并重启',
+            );
+          });
+          _addLog('刷写完成，设备正在重启');
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('刷写完成')),
+          );
+        } finally {
+          await progressSubscription.cancel();
+          await logSubscription.cancel();
+        }
+      } else {
+        setState(() {
+          _status = _usesNativeGenericEsp
+              ? '正在启动通用烧录后端'
+              : '正在启动通用 esptool 烧录引擎';
+          _progress = FlashProgress(
+            writtenBytes: 0,
+            totalBytes: 100,
+            speedBytesPerSecond: 0,
+            stage: _usesNativeGenericEsp ? '启动通用烧录后端' : '启动 esptool',
+          );
+        });
+
+        final logSubscription =
+            EsptoolService.instance.logs.listen(_handleEsptoolLog);
+        final progressSubscription = _usesNativeGenericEsp
+            ? EsptoolService.instance.paperS3Progress.listen((progress) {
+                if (!mounted) return;
+                setState(() {
+                  _progress = progress;
+                  _status = progress.stage;
+                });
+              })
+            : null;
+        try {
+          final result = _usesNativeGenericEsp
+              ? await EsptoolService.instance.flashEspNative(
+                  deviceName: device.id,
+                  profileId: _nativeEspProfileId,
+                  firmware: File(path),
+                  flashOffset: widget.firmware.flashOffset,
+                  baudRate: _baudRate,
+                )
+              : await EsptoolService.instance.flashFullImage(
+                  port: device.id,
+                  firmware: File(path),
+                  flashOffset: widget.firmware.flashOffset,
+                  baudRate: _baudRate,
+                  flashProfile: _flashProfile,
+                );
+          if (!mounted) return;
+
+          // 检测 SYNC/连接失败
+          if (!result.success) {
+            final output = result.output;
+            final isSyncFailure =
+                output.contains('SYNC') ||
+                output.contains('sync') ||
+                output.contains('Connecting') ||
+                output.contains('timeout') ||
+                output.contains('Timed out');
+            if (isSyncFailure) {
+              await _showSyncFailureDialog(output.isEmpty
+                  ? 'SYNC 超时或连接失败'
+                  : output.split('\n').last);
+              return;
+            }
+            throw Exception(output.isEmpty
+                ? (_usesNativeGenericEsp ? '原生 ESP 烧录失败' : 'esptool 烧录失败')
+                : output.split('\n').last);
+          }
+
+          setState(() {
+            _status = '刷写完成，设备正在重启';
+            _progress = const FlashProgress(
+              writtenBytes: 100,
+              totalBytes: 100,
+              speedBytesPerSecond: 0,
+              stage: 'Done, rebooting / 完成并重启',
+            );
+          });
+          _addLog('刷写完成，设备正在重启');
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('刷写完成')),
+          );
+        } finally {
+          await progressSubscription?.cancel();
+          await logSubscription.cancel();
+        }
+      }
+    } on TimeoutException {
+      if (!mounted) return;
+      await _showSyncFailureDialog(
+          '连接超时：设备未在预期时间内响应。请确认设备已进入下载模式（红灯闪烁）。');
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _status = '刷写失败: $error');
+      _addLog('失败: $error');
+    } finally {
+      await _flasher.close();
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _cancelling = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = _progress;
+    final theme = Theme.of(context);
+    return VinkBackdrop(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(title: const Text('刷写固件')),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(14, 8, 14, 28),
+          children: [
+            const VinkHeroHeader(
+              eyebrow: 'Flash Console',
+              title: '写入完整固件',
+              subtitle: '确认 USB 设备、下载模式和烧录速度后开始写入；日志会保留，方便失败时复盘。',
+              icon: Icons.flash_on_rounded,
+            ),
+            const SizedBox(height: 12),
+            VinkGlassCard(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.firmware.name,
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -0.6,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      VinkPill(
+                        icon: Icons.tag_rounded,
+                        text: widget.firmware.version,
+                        color: VinkColors.cyan,
+                      ),
+                      VinkPill(
+                        icon: Icons.cloud_done_rounded,
+                        text: widget.firmware.sourceLabel,
+                        color: VinkColors.mint,
+                      ),
+                      VinkPill(
+                        icon: Icons.memory_rounded,
+                        text: widget.firmware.flashOffset == 0
+                            ? '完整镜像 0x0'
+                            : 'Offset 0x${widget.firmware.flashOffset.toRadixString(16)}',
+                        color: VinkColors.amber,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    '本地文件',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: VinkColors.muted,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  SelectableText(
+                    widget.firmware.localPath ?? '未下载',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: VinkColors.text,
+                      fontFamily: 'monospace',
+                      height: 1.35,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    '写入方式：${_burnMode == 'fast' ? '快速烧录' : '彻底烧录'} · $_flashProfileLabel · ${_baudRateLabel(_baudRate)}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: VinkColors.muted,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            VinkGlassCard(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'USB 设备',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: _busy || _scanning ? null : _scanDevices,
+                        icon: _scanning
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.refresh_rounded),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  if (_devices.isEmpty)
+                    const Text('无设备', style: TextStyle(color: VinkColors.muted))
+                  else
+                    ..._devices.map(
+                      (device) => Container(
+                        margin: const EdgeInsets.only(top: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.035),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: VinkColors.lineSoft),
+                        ),
+                        child: RadioListTile<String>(
+                          dense: true,
+                          value: device.id,
+                          groupValue: _selectedDevice?.id,
+                          onChanged: _busy
+                              ? null
+                              : (_) => setState(() => _selectedDevice = device),
+                          title: Text(device.label),
+                          activeColor: VinkColors.cyan,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            if (progress != null)
+              VinkGlassCard(
+                padding: const EdgeInsets.all(16),
+                selected: true,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.data_saver_on_rounded,
+                            color: VinkColors.cyan, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            progress.stage,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(999),
+                      child: LinearProgressIndicator(
+                        value: progress.percent / 100,
+                        minHeight: 8,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${progress.percent.toStringAsFixed(1)}% · ${(progress.speedBytesPerSecond / 1024).toStringAsFixed(1)} KB/s',
+                      style: const TextStyle(color: VinkColors.muted),
+                    ),
+                  ],
+                ),
+              ),
+            if (_status != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Text(
+                  _status!,
+                  style: const TextStyle(color: VinkColors.muted),
+                ),
+              ),
+            if (_logs.isNotEmpty) ...[
+              VinkGlassCard(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '烧录日志',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: _busy
+                              ? null
+                              : () async {
+                                  setState(_logs.clear);
+                                  await _clearPersistedLogs();
+                                },
+                          child: const Text('清空'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      constraints: const BoxConstraints(maxHeight: 220),
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xCC05070B),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: VinkColors.lineSoft),
+                      ),
+                      child: SingleChildScrollView(
+                        reverse: true,
+                        child: SelectableText(
+                          _logs.join('\n'),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            height: 1.35,
+                            color: VinkColors.muted,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (_busy) ...[
+              OutlinedButton.icon(
+                onPressed: _cancelling ? null : _cancelFlasher,
+                icon: _cancelling
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.cancel_outlined),
+                label: Text(_cancelling ? '取消中...' : '取消烧录'),
+              ),
+              const SizedBox(height: 8),
+            ] else ...[
+              FilledButton.icon(
+                onPressed: _flash,
+                icon: const Icon(Icons.flash_on_rounded),
+                label: const Text('开始刷写'),
+              ),
+              const SizedBox(height: 8),
+            ],
+            const Text(
+              '提示: PaperS3 官方下载模式是 USB 连接后长按侧边电源键，直到背面状态灯红色闪烁。推荐使用"官方模式"；若一直卡在 Connecting，请确认红灯正在闪烁后再点确认。',
+              style: TextStyle(color: VinkColors.muted),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

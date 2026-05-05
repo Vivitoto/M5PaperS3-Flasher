@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 
 class VinkColors {
@@ -25,49 +23,17 @@ class VinkBackdrop extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: const BoxDecoration(
-        gradient: RadialGradient(
-          center: Alignment(-0.7, -0.95),
-          radius: 1.25,
-          colors: [Color(0xFF18233A), VinkColors.ink],
-          stops: [0, 0.72],
+        // Keep the app background intentionally flat and even. The previous
+        // clipped radial glows produced visible bright/dark patches on real
+        // devices and in screenshots, especially behind the firmware library.
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF0B1020), Color(0xFF080D16), VinkColors.ink],
+          stops: [0, 0.58, 1],
         ),
       ),
-      child: Stack(
-        children: [
-          const Positioned(
-            top: -130,
-            right: -90,
-            child: _Glow(size: 260, color: Color(0x337DD3FC)),
-          ),
-          const Positioned(
-            top: 160,
-            left: -130,
-            child: _Glow(size: 240, color: Color(0x2286EFAC)),
-          ),
-          child,
-        ],
-      ),
-    );
-  }
-}
-
-class _Glow extends StatelessWidget {
-  const _Glow({required this.size, required this.color});
-
-  final double size;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: ImageFiltered(
-        imageFilter: ImageFilter.blur(sigmaX: 46, sigmaY: 46),
-        child: Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(shape: BoxShape.circle, color: color),
-        ),
-      ),
+      child: child,
     );
   }
 }

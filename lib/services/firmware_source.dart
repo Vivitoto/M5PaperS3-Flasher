@@ -26,7 +26,7 @@ class VinkSource {
       final response = await _client.get(
         Uri.parse(manifestUrl),
         headers: {'Accept': 'application/json'},
-      );
+      ).timeout(const Duration(seconds: 4));
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw Exception('Vink 固件清单请求失败: ${response.statusCode}');
@@ -152,7 +152,7 @@ class M5BurnerSource {
   Future<List<Firmware>> fetchFirmwares() async {
     final response = await _client.get(Uri.parse(_apiUrl), headers: {
       'Accept': 'application/json'
-    }).timeout(const Duration(seconds: 8));
+    }).timeout(const Duration(seconds: 4));
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception('M5Burner 固件清单请求失败: ${response.statusCode}');
     }
@@ -216,7 +216,7 @@ class LilyGoSource {
   Future<List<Firmware>> fetchFirmwares() async {
     final response = await _client.get(Uri.parse(_manifestUrl), headers: {
       'Accept': 'application/json'
-    }).timeout(const Duration(seconds: 8));
+    }).timeout(const Duration(seconds: 4));
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception('LilyGo 固件清单请求失败: ${response.statusCode}');
     }
@@ -367,26 +367,74 @@ class FirmwareRepository {
         _lilyGoSource = lilyGoSource ?? LilyGoSource(),
         _customSource = customSource ?? const CustomUrlSource();
 
+  static const _cacheKeys = ['vink', 'm5burner', 'lilygo', 'custom'];
+  static const _cachePrefix = 'firmwareRepository.cache.v2.';
+
   final VinkSource _vinkSource;
   final M5BurnerSource _m5BurnerSource;
   final LilyGoSource _lilyGoSource;
   final CustomUrlSource _customSource;
 
+  Future<List<Firmware>> fetchCachedFirmwares() async {
+    final prefs = await SharedPreferences.getInstance();
+    final results = <Firmware>[];
+    for (final key in _cacheKeys) {
+      results
+          .addAll(_decodeCachedFirmwares(prefs.getString(_cachePrefix + key)));
+    }
+    _sortFirmwares(results);
+    return results;
+  }
+
   Future<List<Firmware>> fetchAllFirmwares() async {
     // 所有源并行请求；单个源慢/失败不能卡住整个固件库。
+    // 远端失败时回退到上次缓存，避免用户每次打开都等网络。
     final allResults = await Future.wait<List<Firmware>>([
-      _safeFetch(_vinkSource.fetchFirmwares),
-      _safeFetch(_m5BurnerSource.fetchFirmwares),
-      _safeFetch(_lilyGoSource.fetchFirmwares),
-      _safeFetch(_customSource.fetchFirmwares,
-          timeout: const Duration(seconds: 3)),
+      _safeFetchCached('vink', _vinkSource.fetchFirmwares,
+          timeout: const Duration(seconds: 4)),
+      _safeFetchCached('m5burner', _m5BurnerSource.fetchFirmwares,
+          timeout: const Duration(seconds: 4)),
+      _safeFetchCached('lilygo', _lilyGoSource.fetchFirmwares,
+          timeout: const Duration(seconds: 4)),
+      _safeFetchCached('custom', _customSource.fetchFirmwares,
+          timeout: const Duration(seconds: 1)),
     ]);
 
     final results = <Firmware>[
       for (final batch in allResults) ...batch,
     ];
 
-    results.sort((a, b) {
+    _sortFirmwares(results);
+    return results;
+  }
+
+  Future<List<Firmware>> _safeFetchCached(
+    String cacheKey,
+    Future<List<Firmware>> Function() fetch, {
+    required Duration timeout,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    try {
+      final firmwares = await fetch().timeout(timeout);
+      if (firmwares.isNotEmpty || cacheKey == 'custom') {
+        await prefs.setString(
+          _cachePrefix + cacheKey,
+          jsonEncode(firmwares.map(_firmwareToJson).toList()),
+        );
+        return firmwares;
+      }
+      final cached =
+          _decodeCachedFirmwares(prefs.getString(_cachePrefix + cacheKey));
+      return cached.isEmpty ? firmwares : cached;
+    } on TimeoutException {
+      return _decodeCachedFirmwares(prefs.getString(_cachePrefix + cacheKey));
+    } catch (_) {
+      return _decodeCachedFirmwares(prefs.getString(_cachePrefix + cacheKey));
+    }
+  }
+
+  void _sortFirmwares(List<Firmware> firmwares) {
+    firmwares.sort((a, b) {
       if (a.source == FirmwareSource.vink && b.source != FirmwareSource.vink) {
         return -1;
       }
@@ -395,20 +443,78 @@ class FirmwareRepository {
       }
       return _compareVersions(b.version, a.version);
     });
-    return results;
   }
 
-  Future<List<Firmware>> _safeFetch(
-    Future<List<Firmware>> Function() fetch, {
-    Duration timeout = const Duration(seconds: 8),
-  }) async {
+  List<Firmware> _decodeCachedFirmwares(String? raw) {
+    if (raw == null || raw.isEmpty) return const <Firmware>[];
     try {
-      return await fetch().timeout(timeout);
-    } on TimeoutException {
-      return const <Firmware>[];
+      return _asList(jsonDecode(raw))
+          .map(_asMap)
+          .map(_firmwareFromJson)
+          .toList();
     } catch (_) {
       return const <Firmware>[];
     }
+  }
+
+  Map<String, dynamic> _firmwareToJson(Firmware firmware) {
+    return {
+      'id': firmware.id,
+      'name': firmware.name,
+      'version': firmware.version,
+      'description': firmware.description,
+      'downloadUrl': firmware.downloadUrl,
+      'source': firmware.source.name,
+      'changelog': firmware.changelog,
+      'sizeBytes': firmware.sizeBytes,
+      'releaseUrl': firmware.releaseUrl,
+      'localPath': firmware.localPath,
+      'flashOffset': firmware.flashOffset,
+      'hash': firmware.hash == null
+          ? null
+          : {
+              'type': firmware.hash!.type.name,
+              'value': firmware.hash!.value,
+            },
+    };
+  }
+
+  Firmware _firmwareFromJson(Map<String, dynamic> json) {
+    final sourceName = _asString(json['source']);
+    final source = FirmwareSource.values.firstWhere(
+      (item) => item.name == sourceName,
+      orElse: () => FirmwareSource.custom,
+    );
+    final hashJson = _asMap(json['hash']);
+    final hashTypeName = _asString(hashJson['type']);
+    final hashValue = _asString(hashJson['value']);
+    final hash = hashValue.isEmpty
+        ? null
+        : FirmwareHash(
+            type: HashType.values.firstWhere(
+              (item) => item.name == hashTypeName,
+              orElse: () => HashType.sha256,
+            ),
+            value: hashValue,
+          );
+    return Firmware(
+      id: _asString(json['id']),
+      name: _asString(json['name']),
+      version: _asString(json['version']),
+      description: _asString(json['description']),
+      downloadUrl: _asString(json['downloadUrl']),
+      source: source,
+      changelog: _asString(json['changelog']),
+      sizeBytes: _asInt(json['sizeBytes']),
+      hash: hash,
+      releaseUrl: _asString(json['releaseUrl']).isEmpty
+          ? null
+          : _asString(json['releaseUrl']),
+      localPath: _asString(json['localPath']).isEmpty
+          ? null
+          : _asString(json['localPath']),
+      flashOffset: _asInt(json['flashOffset']) ?? 0,
+    );
   }
 
   int _compareVersions(String a, String b) {

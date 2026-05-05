@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/firmware.dart';
@@ -23,6 +25,7 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
   final Map<String, LocalFirmwareStatus> _localStatus = {};
   final Map<String, int> _partialBytes = {};
   String _selectedDevice = 'm5stack';
+  bool _isRefreshingNetwork = false;
 
   @override
   void initState() {
@@ -30,7 +33,19 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
     _future = _loadFirmwares();
   }
 
-  Future<List<Firmware>> _loadFirmwares() async {
+  Future<List<Firmware>> _loadFirmwares({bool preferCache = true}) async {
+    if (preferCache) {
+      final cached = await _repository.fetchCachedFirmwares();
+      if (cached.isNotEmpty) {
+        await _hydrateLocalState(cached);
+        unawaited(_refreshFromNetwork(silent: true));
+        return cached;
+      }
+    }
+    return _loadFromNetwork();
+  }
+
+  Future<List<Firmware>> _loadFromNetwork() async {
     final firmwares = await _repository.fetchAllFirmwares();
     await _hydrateLocalState(firmwares);
     return firmwares;
@@ -58,8 +73,26 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
   }
 
   Future<void> _refresh() async {
-    setState(() => _future = _loadFirmwares());
-    await _future;
+    final next = _loadFirmwares(preferCache: false);
+    setState(() => _future = next);
+    await next;
+  }
+
+  Future<void> _refreshFromNetwork({required bool silent}) async {
+    if (_isRefreshingNetwork) return;
+    _isRefreshingNetwork = true;
+    try {
+      final firmwares = await _loadFromNetwork();
+      if (!mounted) return;
+      if (firmwares.isNotEmpty || !silent) {
+        setState(() => _future = Future.value(firmwares));
+      }
+    } catch (error) {
+      if (!mounted || silent) return;
+      setState(() => _future = Future.error(error));
+    } finally {
+      _isRefreshingNetwork = false;
+    }
   }
 
   Future<void> _download(Firmware firmware, {bool force = false}) async {

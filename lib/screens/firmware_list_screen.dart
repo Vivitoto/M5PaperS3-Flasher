@@ -25,6 +25,7 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
   final Map<String, LocalFirmwareStatus> _localStatus = {};
   final Map<String, int> _partialBytes = {};
   String _selectedDevice = 'm5stack';
+  String? _lastFirmwareSignature;
   bool _isRefreshingNetwork = false;
 
   @override
@@ -38,6 +39,7 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
       final cached = await _repository.fetchCachedFirmwares();
       if (cached.isNotEmpty) {
         await _hydrateLocalState(cached);
+        _rememberFirmwares(cached);
         unawaited(_refreshFromNetwork(silent: true));
         return cached;
       }
@@ -48,7 +50,23 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
   Future<List<Firmware>> _loadFromNetwork() async {
     final firmwares = await _repository.fetchAllFirmwares();
     await _hydrateLocalState(firmwares);
+    _rememberFirmwares(firmwares);
     return firmwares;
+  }
+
+  void _rememberFirmwares(List<Firmware> firmwares) {
+    _lastFirmwareSignature = _firmwareSignature(firmwares);
+  }
+
+  String _firmwareSignature(List<Firmware> firmwares) {
+    return firmwares
+        .map((firmware) => [
+              firmware.id,
+              firmware.version,
+              firmware.downloadUrl,
+              firmware.sizeBytes?.toString() ?? '',
+            ].join('|'))
+        .join('\n');
   }
 
   Future<void> _hydrateLocalState(List<Firmware> firmwares) async {
@@ -81,9 +99,17 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
   Future<void> _refreshFromNetwork({required bool silent}) async {
     if (_isRefreshingNetwork) return;
     _isRefreshingNetwork = true;
+    final previousSignature = _lastFirmwareSignature;
     try {
-      final firmwares = await _loadFromNetwork();
+      final firmwares = await _repository.fetchAllFirmwares();
+      await _hydrateLocalState(firmwares);
       if (!mounted) return;
+      final nextSignature = _firmwareSignature(firmwares);
+      _lastFirmwareSignature = nextSignature;
+      if (silent && nextSignature == previousSignature) {
+        setState(() {});
+        return;
+      }
       if (firmwares.isNotEmpty || !silent) {
         setState(() => _future = Future.value(firmwares));
       }

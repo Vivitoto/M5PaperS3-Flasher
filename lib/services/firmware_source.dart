@@ -12,8 +12,12 @@ import '../models/firmware.dart';
 /// 自己的 releases.json，App 以设备清单作为接口入口。
 class VinkSource {
   static const List<String> _manifestUrls = [
+    'https://gitee.com/vivitoto97/Vink-Firmware/raw/main/PaperS3/releases.json',
     'https://raw.githubusercontent.com/Vivitoto/Vink-Firmware/main/PaperS3/releases.json',
   ];
+
+  static const String _giteeReleaseMirrorBase =
+      'https://gitee.com/vivitoto97/Vink-Firmware/raw/main/PaperS3/releases';
 
   final http.Client _client;
 
@@ -22,17 +26,23 @@ class VinkSource {
   Future<List<Firmware>> fetchFirmwares() async {
     final results = <Firmware>[];
 
+    Object? lastError;
     for (final manifestUrl in _manifestUrls) {
-      final response = await _client.get(
-        Uri.parse(manifestUrl),
-        headers: {'Accept': 'application/json'},
-      ).timeout(const Duration(seconds: 4));
+      Map<String, dynamic> manifest;
+      try {
+        final response = await _client.get(
+          Uri.parse(manifestUrl),
+          headers: {'Accept': 'application/json'},
+        ).timeout(const Duration(seconds: 3));
 
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception('Vink 固件清单请求失败: ${response.statusCode}');
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          throw Exception('Vink 固件清单请求失败: ${response.statusCode}');
+        }
+        manifest = _asMap(jsonDecode(response.body));
+      } catch (error) {
+        lastError = error;
+        continue;
       }
-
-      final manifest = _asMap(jsonDecode(response.body));
       final device = _asString(manifest['device'], fallback: 'unknown');
       final firmwareName =
           _asString(manifest['firmwareName'], fallback: 'Vink-$device');
@@ -50,6 +60,7 @@ class VinkSource {
         final assetName = _asString(asset['name']);
         final downloadUrl = _asString(asset['url']);
         if (downloadUrl.isEmpty) continue;
+        final mirrorUrls = _mirrorUrls(asset, assetName);
 
         final changelog = _asString(release['changelog']).trim();
         final summary = _asString(release['summary']).trim();
@@ -67,10 +78,13 @@ class VinkSource {
           releaseUrl: _asNullableString(release['releaseUrl']),
           source: FirmwareSource.vink,
           flashOffset: _asInt(asset['flashOffset']) ?? 0,
+          mirrorUrls: mirrorUrls,
         ));
       }
+      if (results.isNotEmpty) return results;
     }
 
+    if (lastError != null) throw Exception('Vink 固件清单请求失败: $lastError');
     return results;
   }
 
@@ -102,6 +116,16 @@ class VinkSource {
     if (value is num) return value.toInt();
     if (value is String) return int.tryParse(value.trim());
     return null;
+  }
+
+  List<String> _mirrorUrls(Map<String, dynamic> asset, String assetName) {
+    final urls = <String>[
+      ..._asList(asset['mirrorUrls'])
+          .map(_asString)
+          .where((url) => url.isNotEmpty),
+      if (assetName.isNotEmpty) '$_giteeReleaseMirrorBase/$assetName',
+    ];
+    return urls.toSet().toList();
   }
 
   Map<String, dynamic>? _selectFlashAsset(Map<String, dynamic> assets) {
@@ -470,6 +494,7 @@ class FirmwareRepository {
       'releaseUrl': firmware.releaseUrl,
       'localPath': firmware.localPath,
       'flashOffset': firmware.flashOffset,
+      'mirrorUrls': firmware.mirrorUrls,
       'hash': firmware.hash == null
           ? null
           : {
@@ -514,6 +539,10 @@ class FirmwareRepository {
           ? null
           : _asString(json['localPath']),
       flashOffset: _asInt(json['flashOffset']) ?? 0,
+      mirrorUrls: _asList(json['mirrorUrls'])
+          .map(_asString)
+          .where((url) => url.isNotEmpty)
+          .toList(),
     );
   }
 

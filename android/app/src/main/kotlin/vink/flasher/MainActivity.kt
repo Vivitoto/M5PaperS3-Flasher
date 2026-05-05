@@ -63,22 +63,31 @@ class MainActivity : FlutterActivity() {
 
     private fun downloadApkToDownloads(call: MethodCall, result: MethodChannel.Result) {
         val url = call.argument<String>("url")
+        val fallbackUrls = call.argument<List<*>>("fallbackUrls")
+            ?.mapNotNull { it?.toString()?.takeIf { value -> value.isNotBlank() } }
+            ?: emptyList()
         val rawName = call.argument<String>("name") ?: "vink-flasher-update.apk"
         val expectedSize = call.argument<Number>("size")?.toLong()
-        if (url.isNullOrBlank()) {
+        val urls = listOfNotNull(url?.takeIf { it.isNotBlank() }) + fallbackUrls
+        if (urls.isEmpty()) {
             result.error("bad_args", "Missing apk url", null)
             return
         }
         val name = rawName.replace(Regex("[^A-Za-z0-9._-]"), "_")
 
         Thread {
-            try {
-                val downloaded = writeApkToPublicDownloads(url, name, expectedSize)
-                mainHandler.post { result.success(downloaded) }
-            } catch (error: Throwable) {
-                val details = buildNativeErrorDetails(error)
-                mainHandler.post { result.error("download_failed", details, null) }
+            var lastError: Throwable? = null
+            for (candidate in urls.distinct()) {
+                try {
+                    val downloaded = writeApkToPublicDownloads(candidate, name, expectedSize)
+                    mainHandler.post { result.success(downloaded) }
+                    return@Thread
+                } catch (error: Throwable) {
+                    lastError = error
+                }
             }
+            val details = buildNativeErrorDetails(lastError ?: IllegalStateException("APK download failed"))
+            mainHandler.post { result.error("download_failed", details, null) }
         }.start()
     }
 

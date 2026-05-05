@@ -1,4 +1,11 @@
-enum FirmwareSource { vink, m5stackOfficial, m5stackCommunity, lilyGo, edcBook, custom }
+enum FirmwareSource {
+  vink,
+  m5stackOfficial,
+  m5stackCommunity,
+  lilyGo,
+  edcBook,
+  custom
+}
 
 enum HashType { md5, sha256 }
 
@@ -23,6 +30,7 @@ class Firmware {
     this.releaseUrl,
     this.localPath,
     this.flashOffset = 0,
+    this.mirrorUrls = const <String>[],
   });
 
   final String id;
@@ -36,8 +44,12 @@ class Firmware {
   final FirmwareHash? hash;
   final String? releaseUrl;
   final String? localPath;
+
   /// ESP32 flash offset. Full 16MB images are written at 0x0.
   final int flashOffset;
+
+  /// Preferred download mirrors. downloadUrl remains the final fallback.
+  final List<String> mirrorUrls;
 
   Firmware copyWith({
     String? id,
@@ -52,6 +64,7 @@ class Firmware {
     String? releaseUrl,
     String? localPath,
     int? flashOffset,
+    List<String>? mirrorUrls,
   }) {
     return Firmware(
       id: id ?? this.id,
@@ -66,6 +79,7 @@ class Firmware {
       releaseUrl: releaseUrl ?? this.releaseUrl,
       localPath: localPath ?? this.localPath,
       flashOffset: flashOffset ?? this.flashOffset,
+      mirrorUrls: mirrorUrls ?? this.mirrorUrls,
     );
   }
 
@@ -89,7 +103,8 @@ class Firmware {
   String get sizeLabel {
     final size = sizeBytes;
     if (size == null || size <= 0) return 'Unknown / 未知';
-    if (size >= 1024 * 1024) return '${(size / 1024 / 1024).toStringAsFixed(2)} MB';
+    if (size >= 1024 * 1024)
+      return '${(size / 1024 / 1024).toStringAsFixed(2)} MB';
     if (size >= 1024) return '${(size / 1024).toStringAsFixed(1)} KB';
     return '$size B';
   }

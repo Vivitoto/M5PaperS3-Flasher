@@ -37,8 +37,9 @@ class DownloadProgress {
   final String? filePath;
   final bool? verified;
 
-  double? get fraction =>
-      totalBytes == null || totalBytes == 0 ? null : receivedBytes / totalBytes!;
+  double? get fraction => totalBytes == null || totalBytes == 0
+      ? null
+      : receivedBytes / totalBytes!;
 }
 
 class DownloadManager {
@@ -80,7 +81,8 @@ class DownloadManager {
     );
   }
 
-  Stream<DownloadProgress> download(Firmware firmware, {bool force = false}) async* {
+  Stream<DownloadProgress> download(Firmware firmware,
+      {bool force = false}) async* {
     final file = await _targetFile(firmware);
     final tempFile = File('${file.path}.part');
     final expectedSize = firmware.sizeBytes;
@@ -105,18 +107,41 @@ class DownloadManager {
     }
 
     var existing = await tempFile.exists() ? await tempFile.length() : 0;
-    if (!archiveDownload && expectedSize != null && expectedSize > 0 && existing > expectedSize) {
+    if (!archiveDownload &&
+        expectedSize != null &&
+        expectedSize > 0 &&
+        existing > expectedSize) {
       await tempFile.delete();
       existing = 0;
     }
 
-    final request = http.Request('GET', Uri.parse(firmware.downloadUrl));
-    if (existing > 0) request.headers['Range'] = 'bytes=$existing-';
-
-    final response = await _client.send(request);
+    final downloadUrls = _downloadUrls(firmware);
+    http.StreamedResponse? response;
+    Object? lastError;
+    for (final url in downloadUrls) {
+      try {
+        final request = http.Request('GET', Uri.parse(url));
+        if (existing > 0) request.headers['Range'] = 'bytes=$existing-';
+        final candidate =
+            await _client.send(request).timeout(const Duration(seconds: 12));
+        if ((candidate.statusCode >= 200 && candidate.statusCode < 300) ||
+            candidate.statusCode == 416) {
+          response = candidate;
+          break;
+        }
+        lastError = 'HTTP ${candidate.statusCode}';
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    if (response == null) {
+      throw Exception('Download failed: $lastError');
+    }
     if (response.statusCode == 416) {
       final tempLength = await tempFile.exists() ? await tempFile.length() : 0;
-      if (expectedSize != null && expectedSize > 0 && tempLength == expectedSize) {
+      if (expectedSize != null &&
+          expectedSize > 0 &&
+          tempLength == expectedSize) {
         if (await file.exists()) await file.delete();
         await tempFile.rename(file.path);
         final verified = await verify(file, firmware.hash);
@@ -129,7 +154,8 @@ class DownloadManager {
         return;
       }
       if (await tempFile.exists()) await tempFile.delete();
-      throw Exception('Download resume failed: server rejected range and partial file is incomplete');
+      throw Exception(
+          'Download resume failed: server rejected range and partial file is incomplete');
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception('Download failed: HTTP ${response.statusCode}');
@@ -143,7 +169,8 @@ class DownloadManager {
     }
 
     final total = _contentLength(response, existing);
-    final sink = tempFile.openWrite(mode: append ? FileMode.append : FileMode.write);
+    final sink =
+        tempFile.openWrite(mode: append ? FileMode.append : FileMode.write);
     var received = existing;
 
     try {
@@ -158,9 +185,13 @@ class DownloadManager {
     }
 
     final finalLength = await tempFile.length();
-    if (!archiveDownload && expectedSize != null && expectedSize > 0 && finalLength != expectedSize) {
+    if (!archiveDownload &&
+        expectedSize != null &&
+        expectedSize > 0 &&
+        finalLength != expectedSize) {
       await tempFile.delete();
-      throw Exception('Download size mismatch: expected $expectedSize bytes, got $finalLength bytes');
+      throw Exception(
+          'Download size mismatch: expected $expectedSize bytes, got $finalLength bytes');
     }
 
     if (await file.exists()) await file.delete();
@@ -168,9 +199,12 @@ class DownloadManager {
       await _extractBinFromArchive(tempFile, file);
       await tempFile.delete();
       final extractedLength = await file.length();
-      if (expectedSize != null && expectedSize > 0 && extractedLength != expectedSize) {
+      if (expectedSize != null &&
+          expectedSize > 0 &&
+          extractedLength != expectedSize) {
         await file.delete();
-        throw Exception('Archive size mismatch: expected $expectedSize bytes, got $extractedLength bytes');
+        throw Exception(
+            'Archive size mismatch: expected $expectedSize bytes, got $extractedLength bytes');
       }
     } else {
       await tempFile.rename(file.path);
@@ -216,7 +250,9 @@ class DownloadManager {
       final size = await file.length();
       firmwares.add(Firmware(
         id: 'local-${name.hashCode}-$size',
-        name: name.contains('Vink-PaperS3') ? 'Vink-PaperS3' : name.replaceAll('.bin', ''),
+        name: name.contains('Vink-PaperS3')
+            ? 'Vink-PaperS3'
+            : name.replaceAll('.bin', ''),
         version: version,
         description: '本地缓存固件 · 网络不可用时仍可烧录',
         changelog: '从本地 firmwares 目录识别。网络恢复后可刷新固件列表获取完整更新说明。',
@@ -235,15 +271,24 @@ class DownloadManager {
     return Directory('${base.path}/firmwares');
   }
 
+  List<String> _downloadUrls(Firmware firmware) {
+    return <String>[
+      ...firmware.mirrorUrls,
+      firmware.downloadUrl,
+    ].where((url) => url.isNotEmpty).toSet().toList();
+  }
+
   Future<File> _targetFile(Firmware firmware) async {
     // 固件不要放临时目录：系统可能清理，用户也无法明确管理。
     // 统一放到 app 文档目录下的 firmwares/，并在固件页提供删除入口。
     final directory = await _firmwareDirectory();
     if (!await directory.exists()) await directory.create(recursive: true);
     final assetName = Uri.tryParse(firmware.downloadUrl)?.pathSegments.last;
-    final fallback = '${firmware.id.replaceAll(RegExp(r'[^a-zA-Z0-9_.-]'), '_')}.bin';
-    var safeName = (assetName == null || assetName.isEmpty ? fallback : assetName)
-        .replaceAll(RegExp(r'[^a-zA-Z0-9_.-]'), '_');
+    final fallback =
+        '${firmware.id.replaceAll(RegExp(r'[^a-zA-Z0-9_.-]'), '_')}.bin';
+    var safeName =
+        (assetName == null || assetName.isEmpty ? fallback : assetName)
+            .replaceAll(RegExp(r'[^a-zA-Z0-9_.-]'), '_');
     if (safeName.toLowerCase().endsWith('.zip')) {
       safeName = safeName.substring(0, safeName.length - 4);
     }
@@ -272,7 +317,9 @@ class DownloadManager {
         bestBin = file;
         // Prefer a file whose name suggests it's the main firmware
         final lower = file.name.toLowerCase();
-        if (lower.contains('full') || lower.contains('firmware') || lower.contains('app')) {
+        if (lower.contains('full') ||
+            lower.contains('firmware') ||
+            lower.contains('app')) {
           bin = file;
           break;
         }
@@ -283,7 +330,8 @@ class DownloadManager {
       throw Exception('ZIP 包内未找到 .bin 固件文件');
     }
     final content = bin.content;
-    final bytes = content is List<int> ? content : List<int>.from(content as Iterable);
+    final bytes =
+        content is List<int> ? content : List<int>.from(content as Iterable);
     await targetFile.writeAsBytes(bytes, flush: true);
   }
 
@@ -296,7 +344,9 @@ class DownloadManager {
   Future<bool?> verify(File file, FirmwareHash? expected) async {
     if (expected == null) return null;
     final bytes = await file.readAsBytes();
-    final digest = expected.type == HashType.md5 ? md5.convert(bytes) : sha256.convert(bytes);
+    final digest = expected.type == HashType.md5
+        ? md5.convert(bytes)
+        : sha256.convert(bytes);
     return digest.toString().toLowerCase() == expected.value.toLowerCase();
   }
 }

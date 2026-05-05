@@ -173,15 +173,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         padding: const EdgeInsets.fromLTRB(14, 4, 14, 96),
         children: [
           const VinkHeroHeader(
-            eyebrow: 'control center',
             title: '控制中心',
-            subtitle: '烧录参数、固件源和应用更新，保持克制清楚。',
             icon: Icons.tune_rounded,
-            trailing: VinkPill(
-              icon: Icons.verified_rounded,
-              text: '推荐',
-              color: VinkColors.text,
-            ),
           ),
           const SizedBox(height: 12),
           _Section(

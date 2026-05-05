@@ -238,11 +238,7 @@ class _LocalFirmwareScreenState extends State<LocalFirmwareScreen> {
               padding: const EdgeInsets.fromLTRB(14, 6, 14, 96),
               children: [
                 VinkHeroHeader(
-                  eyebrow: 'local flasher',
                   title: '本地烧录台',
-                  subtitle: localFirmwares.isEmpty
-                      ? '下载后的完整镜像会收在这里，离线也能烧录。'
-                      : '已备好 ${localFirmwares.length} 个本地镜像，可直接写入设备。',
                   icon: Icons.auto_stories_rounded,
                   trailing: VinkPill(
                     icon: localFirmwares.isEmpty

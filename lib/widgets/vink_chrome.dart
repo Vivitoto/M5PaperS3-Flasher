@@ -89,16 +89,12 @@ class _InkWash extends StatelessWidget {
 class VinkHeroHeader extends StatelessWidget {
   const VinkHeroHeader({
     super.key,
-    required this.eyebrow,
     required this.title,
-    required this.subtitle,
     this.icon = Icons.bolt_rounded,
     this.trailing,
   });
 
-  final String eyebrow;
   final String title;
-  final String subtitle;
   final IconData icon;
   final Widget? trailing;
 
@@ -106,84 +102,46 @@ class VinkHeroHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 13, 13, 13),
+      constraints: const BoxConstraints(minHeight: 64),
+      padding: const EdgeInsets.fromLTRB(14, 12, 13, 12),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(18),
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xF01A1916), Color(0xEE0D0D0C)],
+          colors: [Color(0xEE181715), Color(0xEE0C0C0B)],
         ),
-        border: Border.all(color: Color(0x33F4EFE3)),
+        border: Border.all(color: Color(0x2EF4EFE3)),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x4A000000),
-            blurRadius: 18,
-            offset: Offset(0, 10),
+            color: Color(0x3A000000),
+            blurRadius: 14,
+            offset: Offset(0, 8),
           ),
         ],
       ),
-      child: Stack(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const Positioned(
-            right: -32,
-            top: -38,
-            width: 120,
-            height: 120,
-            child: _InkWash(
-              colors: [Color(0x12F4EFE3), Color(0x00F4EFE3)],
+          VinkIconTile(icon: icon),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.titleLarge?.copyWith(
+                color: VinkColors.text,
+                fontWeight: FontWeight.w900,
+                letterSpacing: -0.45,
+                height: 1.08,
+              ),
             ),
           ),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              VinkIconTile(icon: icon),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      eyebrow.toUpperCase(),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: VinkColors.subtle,
-                        letterSpacing: 1.35,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        color: VinkColors.text,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -0.45,
-                        height: 1.08,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      subtitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: VinkColors.muted,
-                        height: 1.32,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (trailing != null) ...[
-                const SizedBox(width: 10),
-                trailing!,
-              ],
-            ],
-          ),
+          if (trailing != null) ...[
+            const SizedBox(width: 10),
+            trailing!,
+          ],
         ],
       ),
     );

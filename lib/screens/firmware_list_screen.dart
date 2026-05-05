@@ -261,15 +261,8 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
               padding: const EdgeInsets.fromLTRB(14, 6, 14, 96),
               children: [
                 const VinkHeroHeader(
-                  eyebrow: 'R2 mirror · github fallback',
                   title: 'Vink 固件库',
-                  subtitle: '墨水屏固件分发与烧录，R2 优先，GitHub 兜底。',
                   icon: Icons.menu_book_rounded,
-                  trailing: VinkPill(
-                    icon: Icons.cloud_done_rounded,
-                    text: 'R2',
-                    color: VinkColors.text,
-                  ),
                 ),
                 const SizedBox(height: 12),
                 if (filters.isNotEmpty) ...[

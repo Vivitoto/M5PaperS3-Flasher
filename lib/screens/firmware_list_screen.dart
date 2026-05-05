@@ -260,22 +260,38 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(14, 6, 14, 96),
               children: [
+                const VinkHeroHeader(
+                  eyebrow: 'R2 mirror · github fallback',
+                  title: 'Vink 固件库',
+                  subtitle: '墨水屏固件分发与烧录，R2 优先，GitHub 兜底。',
+                  icon: Icons.menu_book_rounded,
+                  trailing: VinkPill(
+                    icon: Icons.cloud_done_rounded,
+                    text: 'R2',
+                    color: VinkColors.text,
+                  ),
+                ),
+                const SizedBox(height: 12),
                 if (filters.isNotEmpty) ...[
                   _DeviceFilterBar(
                     filters: filters,
                     selected: _selectedDevice,
                     onSelected: (id) => setState(() => _selectedDevice = id),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
                 ],
                 Padding(
-                  padding: const EdgeInsets.only(left: 2, bottom: 8),
-                  child: Text(
-                    '${filtered.length} 个版本',
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: VinkColors.muted),
+                  padding: const EdgeInsets.fromLTRB(2, 0, 2, 10),
+                  child: Row(
+                    children: [
+                      VinkPill(
+                        icon: Icons.inventory_2_rounded,
+                        text: '${filtered.length} 个版本',
+                        color: VinkColors.blue,
+                      ),
+                      const SizedBox(width: 8),
+                      const Expanded(child: VinkSoftDivider()),
+                    ],
                   ),
                 ),
                 if (firmwares.isEmpty)
@@ -423,7 +439,7 @@ class _DeviceFilterBar extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0x99101722),
+        color: const Color(0x99181715),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: VinkColors.lineSoft),
       ),

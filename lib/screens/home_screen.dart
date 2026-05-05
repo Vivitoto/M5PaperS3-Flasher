@@ -46,7 +46,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 gradient: const LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [Color(0xEE121A28), Color(0xEE0B111D)],
+                  colors: [Color(0xEE181715), Color(0xEE0B0B0A)],
                 ),
                 border: Border.all(color: VinkColors.lineSoft),
                 boxShadow: const [
@@ -62,7 +62,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: NavigationBar(
                   height: 64,
                   selectedIndex: _index,
-                  onDestinationSelected: (value) => setState(() => _index = value),
+                  onDestinationSelected: (value) =>
+                      setState(() => _index = value),
                   destinations: const [
                     NavigationDestination(
                       icon: Icon(Icons.auto_awesome_mosaic_outlined),

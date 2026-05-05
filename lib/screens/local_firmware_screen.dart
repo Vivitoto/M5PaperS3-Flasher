@@ -237,21 +237,28 @@ class _LocalFirmwareScreenState extends State<LocalFirmwareScreen> {
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(14, 6, 14, 96),
               children: [
-                Padding(
-                  padding: const EdgeInsets.only(left: 2, bottom: 8),
-                  child: Text(
-                    '${localFirmwares.length} 个本地固件',
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: VinkColors.muted),
+                VinkHeroHeader(
+                  eyebrow: 'local flasher',
+                  title: '本地烧录台',
+                  subtitle: localFirmwares.isEmpty
+                      ? '下载后的完整镜像会收在这里，离线也能烧录。'
+                      : '已备好 ${localFirmwares.length} 个本地镜像，可直接写入设备。',
+                  icon: Icons.auto_stories_rounded,
+                  trailing: VinkPill(
+                    icon: localFirmwares.isEmpty
+                        ? Icons.inventory_2_outlined
+                        : Icons.check_circle_rounded,
+                    text: '${localFirmwares.length} 个',
+                    color: localFirmwares.isEmpty
+                        ? VinkColors.muted
+                        : VinkColors.text,
                   ),
                 ),
+                const SizedBox(height: 12),
                 if (_loadWarning != null) ...[
-                  const SizedBox(height: 8),
                   _OfflineLocalNotice(error: _loadWarning!),
+                  const SizedBox(height: 10),
                 ],
-                const SizedBox(height: 8),
                 if (localFirmwares.isEmpty)
                   const _EmptyLocalFirmware()
                 else
@@ -373,34 +380,67 @@ class _LocalFirmwareCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              VinkIconTile(
+                icon: complete
+                    ? Icons.flash_on_rounded
+                    : Icons.downloading_rounded,
+                color: complete ? VinkColors.mint : VinkColors.amber,
+              ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(firmware.name,
-                        style: theme.textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w900)),
-                    const SizedBox(height: 2),
-                    Text(firmware.version,
-                        style: const TextStyle(color: VinkColors.muted)),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(firmware.name,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: -0.35)),
+                        ),
+                        const SizedBox(width: 8),
+                        VinkPill(
+                          icon: complete
+                              ? Icons.check_circle_rounded
+                              : Icons.downloading_rounded,
+                          text: complete ? '可烧录' : '未完成',
+                          color: complete ? VinkColors.mint : VinkColors.amber,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 7),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        VinkPill(
+                          icon: Icons.new_releases_rounded,
+                          text: firmware.version,
+                          color: VinkColors.blue,
+                        ),
+                        VinkPill(
+                          icon: firmware.flashOffset == 0
+                              ? Icons.all_inclusive_rounded
+                              : Icons.app_shortcut_rounded,
+                          text: firmware.flashOffset == 0 ? '完整镜像' : 'App 分区',
+                          color: firmware.flashOffset == 0
+                              ? VinkColors.mint
+                              : VinkColors.amber,
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
-              VinkPill(
-                icon: complete
-                    ? Icons.check_circle_rounded
-                    : Icons.downloading_rounded,
-                text: complete ? '可烧录' : '未完成',
-                color: complete ? VinkColors.mint : VinkColors.amber,
-              ),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
           Text(
-            '${firmware.sizeLabel} · ${firmware.flashOffset == 0 ? '完整镜像' : 'App分区'}',
+            firmware.sizeLabel,
             style: theme.textTheme.bodySmall?.copyWith(color: VinkColors.muted),
           ),
-          const SizedBox(height: 5),
+          const SizedBox(height: 6),
           _StatusLine(info: info),
           const SizedBox(height: 8),
           if (isDownloading)

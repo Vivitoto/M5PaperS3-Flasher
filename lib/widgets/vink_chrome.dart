@@ -1,17 +1,24 @@
 import 'package:flutter/material.dart';
 
 class VinkColors {
-  static const ink = Color(0xFF06080D);
-  static const ink2 = Color(0xFF0B1020);
-  static const surface = Color(0xFF101722);
-  static const surfaceHigh = Color(0xFF172033);
-  static const line = Color(0xFF263244);
-  static const lineSoft = Color(0x1FFFFFFF);
-  static const text = Color(0xFFF4F7FB);
-  static const muted = Color(0xFF9AA7B6);
-  static const cyan = Color(0xFF7DD3FC);
-  static const mint = Color(0xFF86EFAC);
-  static const amber = Color(0xFFFBBF24);
+  // Monochrome ink-wash palette. Keep the old semantic names so existing UI
+  // code still reads naturally, but map them to restrained paper / ink tones.
+  static const ink = Color(0xFF050505);
+  static const ink2 = Color(0xFF0D0D0C);
+  static const surface = Color(0xFF121210);
+  static const surfaceHigh = Color(0xFF1B1A17);
+  static const surfaceLift = Color(0xFF24221E);
+  static const line = Color(0xFF36332D);
+  static const lineSoft = Color(0x26F4EFE3);
+  static const text = Color(0xFFF4EFE3);
+  static const muted = Color(0xFFA9A197);
+  static const subtle = Color(0xFF706A61);
+  static const cyan = Color(0xFFEDE6D8);
+  static const blue = Color(0xFFCFC7BA);
+  static const violet = Color(0xFFB7B0A7);
+  static const mint = Color(0xFFE6E0D2);
+  static const amber = Color(0xFFC8BFAE);
+  static const rose = Color(0xFFD0C4BA);
 }
 
 class VinkBackdrop extends StatelessWidget {
@@ -21,19 +28,60 @@ class VinkBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: const BoxDecoration(
-        // Keep the app background intentionally flat and even. The previous
-        // clipped radial glows produced visible bright/dark patches on real
-        // devices and in screenshots, especially behind the firmware library.
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFF0B1020), Color(0xFF080D16), VinkColors.ink],
-          stops: [0, 0.58, 1],
+    return Stack(
+      children: [
+        const Positioned.fill(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0xFF12110F),
+                  Color(0xFF090909),
+                  Color(0xFF030303),
+                ],
+                stops: [0, 0.52, 1],
+              ),
+            ),
+          ),
         ),
+        const Positioned(
+          top: -120,
+          right: -110,
+          width: 300,
+          height: 300,
+          child: _InkWash(
+            colors: [Color(0x18F4EFE3), Color(0x00F4EFE3)],
+          ),
+        ),
+        const Positioned(
+          left: -150,
+          bottom: 40,
+          width: 360,
+          height: 360,
+          child: _InkWash(
+            colors: [Color(0x14000000), Color(0x00000000)],
+          ),
+        ),
+        Positioned.fill(child: child),
+      ],
+    );
+  }
+}
+
+class _InkWash extends StatelessWidget {
+  const _InkWash({required this.colors});
+
+  final List<Color> colors;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: RadialGradient(colors: colors),
       ),
-      child: child,
     );
   }
 }
@@ -58,82 +106,84 @@ class VinkHeroHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.fromLTRB(14, 13, 13, 13),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(20),
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF19243A), Color(0xFF0F1725)],
+          colors: [Color(0xF01A1916), Color(0xEE0D0D0C)],
         ),
-        border: Border.all(color: VinkColors.lineSoft),
+        border: Border.all(color: Color(0x33F4EFE3)),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x55000000),
-            blurRadius: 26,
-            offset: Offset(0, 16),
+            color: Color(0x4A000000),
+            blurRadius: 18,
+            offset: Offset(0, 10),
           ),
         ],
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
         children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              gradient: const LinearGradient(
-                colors: [VinkColors.cyan, VinkColors.mint],
+          const Positioned(
+            right: -32,
+            top: -38,
+            width: 120,
+            height: 120,
+            child: _InkWash(
+              colors: [Color(0x12F4EFE3), Color(0x00F4EFE3)],
+            ),
+          ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              VinkIconTile(icon: icon),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      eyebrow.toUpperCase(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: VinkColors.subtle,
+                        letterSpacing: 1.35,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        color: VinkColors.text,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -0.45,
+                        height: 1.08,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: VinkColors.muted,
+                        height: 1.32,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x337DD3FC),
-                  blurRadius: 20,
-                  offset: Offset(0, 10),
-                ),
+              if (trailing != null) ...[
+                const SizedBox(width: 10),
+                trailing!,
               ],
-            ),
-            child: Icon(icon, color: Colors.black, size: 28),
+            ],
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  eyebrow.toUpperCase(),
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: VinkColors.cyan,
-                    letterSpacing: 1.3,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  title,
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    color: VinkColors.text,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -0.8,
-                    height: 1.05,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  subtitle,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: VinkColors.muted,
-                    height: 1.35,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (trailing != null) ...[
-            const SizedBox(width: 10),
-            trailing!,
-          ],
         ],
       ),
     );
@@ -154,29 +204,70 @@ class VinkGlassCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
       padding: padding,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(22),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: selected
-              ? const [Color(0xFF1D2B44), Color(0xFF122033)]
-              : const [Color(0xFF111927), Color(0xFF0D1320)],
+              ? const [Color(0xFF25231F), Color(0xFF171614)]
+              : const [Color(0xE8191815), Color(0xE80D0D0B)],
         ),
         border: Border.all(
-          color: selected ? const Color(0x667DD3FC) : VinkColors.lineSoft,
+          color: selected ? const Color(0x70F4EFE3) : VinkColors.lineSoft,
         ),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x33000000),
+            color: Color(0x42000000),
             blurRadius: 18,
             offset: Offset(0, 10),
           ),
         ],
       ),
       child: child,
+    );
+  }
+}
+
+class VinkIconTile extends StatelessWidget {
+  const VinkIconTile({
+    super.key,
+    required this.icon,
+    this.large = false,
+    this.color = VinkColors.cyan,
+  });
+
+  final IconData icon;
+  final bool large;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = large ? 46.0 : 38.0;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(large ? 16 : 13),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFF4EFE3), Color(0xFFCFC7BA)],
+        ),
+        border: Border.all(color: const Color(0x55FFFFFF)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x33000000),
+            blurRadius: 12,
+            offset: Offset(0, 7),
+          ),
+        ],
+      ),
+      child: Icon(icon, color: Colors.black, size: large ? 25 : 20),
     );
   }
 }
@@ -196,27 +287,43 @@ class VinkPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: const Color(0x10F4EFE3),
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: color.withOpacity(0.28)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 6),
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: 5),
           Text(
             text,
             style: TextStyle(
               color: color,
-              fontSize: 11.5,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.1,
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -0.06,
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class VinkSoftDivider extends StatelessWidget {
+  const VinkSoftDivider({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 1,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0x00F4EFE3), Color(0x26F4EFE3), Color(0x00F4EFE3)],
+        ),
       ),
     );
   }

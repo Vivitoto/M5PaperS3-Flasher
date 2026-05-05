@@ -47,37 +47,72 @@ class FirmwareCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const VinkIconTile(icon: Icons.developer_board_rounded),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        latest.name,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: -0.35,
-                          height: 1.15,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              latest.name,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: -0.45,
+                                height: 1.12,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          VinkPill(
+                            icon: Icons.cloud_done_rounded,
+                            text: latest.sourceLabel,
+                            color: VinkColors.cyan,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 5),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
+                          VinkPill(
+                            icon: Icons.new_releases_rounded,
+                            text: latest.version,
+                            color: VinkColors.blue,
+                          ),
+                          VinkPill(
+                            icon: latest.flashOffset == 0
+                                ? Icons.all_inclusive_rounded
+                                : Icons.app_shortcut_rounded,
+                            text: latest.flashOffset == 0 ? '完整镜像' : 'App 分区',
+                            color: latest.flashOffset == 0
+                                ? VinkColors.mint
+                                : VinkColors.amber,
+                          ),
+                        ],
+                      ),
+                      if (latest.description.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          latest.description,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: VinkColors.muted,
+                            height: 1.32,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        latest.version,
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: VinkColors.muted),
-                      ),
+                      ],
                     ],
                   ),
                 ),
-                const SizedBox(width: 12),
-                VinkPill(
-                  icon: Icons.cloud_done_rounded,
-                  text: latest.sourceLabel,
-                  color: VinkColors.cyan,
-                ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             _FirmwareVersionPanel(
               firmware: latest,
               title: '最新版本',
@@ -171,8 +206,8 @@ class _FirmwareVersionPanel extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: downloaded
-              ? const [Color(0xFF13251E), Color(0xFF0D1A18)]
-              : const [Color(0xFF0C1320), Color(0xFF0A101A)],
+              ? const [Color(0xFF22211D), Color(0xFF141311)]
+              : const [Color(0xFF151411), Color(0xFF0D0D0B)],
         ),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(

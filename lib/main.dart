@@ -61,7 +61,7 @@ class VinkFlasherApp extends StatelessWidget {
         navigationBarTheme: NavigationBarThemeData(
           height: 64,
           backgroundColor: Colors.transparent,
-          indicatorColor: const Color(0x227DD3FC),
+          indicatorColor: const Color(0x22F4EFE3),
           surfaceTintColor: Colors.transparent,
           labelTextStyle: WidgetStateProperty.resolveWith(
             (states) => TextStyle(
@@ -83,13 +83,14 @@ class VinkFlasherApp extends StatelessWidget {
           ),
         ),
         chipTheme: ChipThemeData(
-          backgroundColor: const Color(0x1A7DD3FC),
-          side: const BorderSide(color: Color(0x337DD3FC)),
+          backgroundColor: const Color(0x18F4EFE3),
+          side: const BorderSide(color: Color(0x33F4EFE3)),
           labelStyle: const TextStyle(
             color: VinkColors.text,
             fontWeight: FontWeight.w700,
           ),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
         ),
         filledButtonTheme: FilledButtonThemeData(
           style: FilledButton.styleFrom(
@@ -97,8 +98,10 @@ class VinkFlasherApp extends StatelessWidget {
             foregroundColor: Colors.black,
             elevation: 0,
             minimumSize: const Size(0, 38),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            textStyle:
+                const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800),
           ),
         ),
         outlinedButtonTheme: OutlinedButtonThemeData(
@@ -106,8 +109,10 @@ class VinkFlasherApp extends StatelessWidget {
             foregroundColor: VinkColors.text,
             side: const BorderSide(color: VinkColors.line),
             minimumSize: const Size(0, 38),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            textStyle:
+                const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800),
           ),
         ),
         inputDecorationTheme: InputDecorationTheme(
@@ -128,11 +133,13 @@ class VinkFlasherApp extends StatelessWidget {
           labelStyle: const TextStyle(color: VinkColors.muted),
           helperStyle: const TextStyle(color: VinkColors.muted),
         ),
-        dividerTheme: const DividerThemeData(color: VinkColors.lineSoft, thickness: 1),
+        dividerTheme:
+            const DividerThemeData(color: VinkColors.lineSoft, thickness: 1),
         snackBarTheme: SnackBarThemeData(
           backgroundColor: VinkColors.surfaceHigh,
           contentTextStyle: const TextStyle(color: VinkColors.text),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
           behavior: SnackBarBehavior.floating,
         ),
       ),

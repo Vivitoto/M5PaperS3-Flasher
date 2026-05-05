@@ -48,6 +48,8 @@ class AppUpdateService {
     _channel.setMethodCallHandler(_handleNativeCall);
   }
 
+  static const _r2LatestJson =
+      'https://pub-cd203a59e92845d2b1ee0bd779068477.r2.dev/vink-flasher/latest.json';
   static const _giteeLatestJson =
       'https://gitee.com/vivitoto97/Vink-Flasher/raw/main/releases/latest.json';
   static const _latestReleaseApi =
@@ -62,8 +64,8 @@ class AppUpdateService {
     final packageInfo = await PackageInfo.fromPlatform();
     final currentVersion = packageInfo.version;
 
-    final gitee = await _checkGiteeLatest(currentVersion);
-    if (gitee != null) return gitee;
+    final mirrored = await _checkMirroredLatest(currentVersion);
+    if (mirrored != null) return mirrored;
 
     final response = await _client.get(
       Uri.parse(_latestReleaseApi),
@@ -98,39 +100,42 @@ class AppUpdateService {
     );
   }
 
-  Future<AppUpdateInfo?> _checkGiteeLatest(String currentVersion) async {
-    try {
-      final response = await _client.get(
-        Uri.parse(_giteeLatestJson),
-        headers: {'Accept': 'application/json'},
-      ).timeout(const Duration(seconds: 3));
-      if (response.statusCode < 200 || response.statusCode >= 300) return null;
-      final json = _asMap(jsonDecode(response.body));
-      final apkName = _asString(json['apkName']);
-      final latestVersion = _asString(json['latestVersion']);
-      final apkUrl = _asString(json['apkUrl']);
-      if (apkName.isEmpty || latestVersion.isEmpty || apkUrl.isEmpty) {
-        return null;
+  Future<AppUpdateInfo?> _checkMirroredLatest(String currentVersion) async {
+    for (final metadataUrl in const [_r2LatestJson, _giteeLatestJson]) {
+      try {
+        final response = await _client.get(
+          Uri.parse(metadataUrl),
+          headers: {'Accept': 'application/json'},
+        ).timeout(const Duration(seconds: 3));
+        if (response.statusCode < 200 || response.statusCode >= 300) continue;
+        final json = _asMap(jsonDecode(response.body));
+        final apkName = _asString(json['apkName']);
+        final latestVersion = _asString(json['latestVersion']);
+        final apkUrl = _asString(json['apkUrl']);
+        if (apkName.isEmpty || latestVersion.isEmpty || apkUrl.isEmpty) {
+          continue;
+        }
+        return AppUpdateInfo(
+          currentVersion: currentVersion,
+          latestVersion: latestVersion,
+          hasUpdate: _compareVersions(latestVersion, currentVersion) > 0,
+          apkName: apkName,
+          apkUrl: apkUrl,
+          releaseUrl: _asString(json['releaseUrl']).isEmpty
+              ? metadataUrl
+              : _asString(json['releaseUrl']),
+          releaseNotes: _asString(json['releaseNotes']).trim(),
+          apkSize: _asInt(json['apkSize']),
+          fallbackApkUrls: _asList(json['fallbackApkUrls'])
+              .map(_asString)
+              .where((url) => url.isNotEmpty)
+              .toList(),
+        );
+      } catch (_) {
+        continue;
       }
-      return AppUpdateInfo(
-        currentVersion: currentVersion,
-        latestVersion: latestVersion,
-        hasUpdate: _compareVersions(latestVersion, currentVersion) > 0,
-        apkName: apkName,
-        apkUrl: apkUrl,
-        releaseUrl: _asString(json['releaseUrl']).isEmpty
-            ? _giteeLatestJson
-            : _asString(json['releaseUrl']),
-        releaseNotes: _asString(json['releaseNotes']).trim(),
-        apkSize: _asInt(json['apkSize']),
-        fallbackApkUrls: _asList(json['fallbackApkUrls'])
-            .map(_asString)
-            .where((url) => url.isNotEmpty)
-            .toList(),
-      );
-    } catch (_) {
-      return null;
     }
+    return null;
   }
 
   Future<DownloadedApk> downloadApk(

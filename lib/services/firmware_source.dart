@@ -11,11 +11,16 @@ import '../models/firmware.dart';
 /// GitHub Release 是仓库级的，无法放进设备子目录；因此每个设备目录维护
 /// 自己的 releases.json，App 以设备清单作为接口入口。
 class VinkSource {
+  static const String _r2Base =
+      'https://pub-cd203a59e92845d2b1ee0bd779068477.r2.dev';
   static const List<String> _manifestUrls = [
-    'https://gitee.com/vivitoto97/Vink-Firmware/raw/main/PaperS3/releases.json',
+    '$_r2Base/firmware/PaperS3/releases.json',
     'https://raw.githubusercontent.com/Vivitoto/Vink-Firmware/main/PaperS3/releases.json',
+    'https://gitee.com/vivitoto97/Vink-Firmware/raw/main/PaperS3/releases.json',
   ];
 
+  static const String _r2ReleaseMirrorBase =
+      '$_r2Base/firmware/PaperS3/releases';
   static const String _giteeReleaseMirrorBase =
       'https://gitee.com/vivitoto97/Vink-Firmware/raw/main/PaperS3/releases';
 
@@ -120,6 +125,7 @@ class VinkSource {
 
   List<String> _mirrorUrls(Map<String, dynamic> asset, String assetName) {
     final urls = <String>[
+      if (assetName.isNotEmpty) '$_r2ReleaseMirrorBase/$assetName',
       ..._asList(asset['mirrorUrls'])
           .map(_asString)
           .where((url) => url.isNotEmpty),

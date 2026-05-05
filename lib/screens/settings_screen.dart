@@ -168,9 +168,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final updateInfo = _updateInfo;
     return Scaffold(
       backgroundColor: Colors.transparent,
-      appBar: AppBar(toolbarHeight: 48, title: const Text('设置')),
+      appBar: AppBar(
+        toolbarHeight: 48,
+        title: const Text('设置'),
+        actions: const [SizedBox(width: 48)],
+      ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(14, 4, 14, 96),
+        padding: const EdgeInsets.fromLTRB(14, 6, 14, 96),
         children: [
           const VinkHeroHeader(
             title: '控制中心',
@@ -379,21 +383,35 @@ class _BurnModeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final borderColor = selected ? VinkColors.cyan : VinkColors.lineSoft;
-    final backgroundColor = selected
-        ? VinkColors.cyan.withOpacity(0.1)
-        : Colors.white.withOpacity(0.035);
+    final borderColor =
+        selected ? const Color(0x70F4EFE3) : VinkColors.lineSoft;
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(18),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOutCubic,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: backgroundColor,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(18),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: selected
+                ? const [Color(0xFF25231F), Color(0xFF171614)]
+                : const [Color(0x99181715), Color(0x990D0D0B)],
+          ),
           border: Border.all(color: borderColor, width: selected ? 1.2 : 1),
+          boxShadow: selected
+              ? const [
+                  BoxShadow(
+                    color: Color(0x33000000),
+                    blurRadius: 12,
+                    offset: Offset(0, 6),
+                  ),
+                ]
+              : null,
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -425,13 +443,17 @@ class _BurnModeCard extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
-                            color: selected ? VinkColors.cyan : Colors.white10,
+                            color: selected
+                                ? const Color(0x22F4EFE3)
+                                : const Color(0x14F4EFE3),
                             borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: VinkColors.lineSoft),
                           ),
                           child: Text(
                             badge!,
                             style: theme.textTheme.labelSmall?.copyWith(
-                              color: selected ? Colors.black : VinkColors.muted,
+                              color:
+                                  selected ? VinkColors.text : VinkColors.muted,
                               fontWeight: FontWeight.w800,
                             ),
                           ),

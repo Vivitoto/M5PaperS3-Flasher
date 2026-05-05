@@ -456,7 +456,7 @@ class _DeviceFilterBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
       decoration: BoxDecoration(
         color: const Color(0x99181715),
         borderRadius: BorderRadius.circular(20),
@@ -467,16 +467,54 @@ class _DeviceFilterBar extends StatelessWidget {
         child: Row(
           children: [
             for (final filter in filters) ...[
-              ChoiceChip(
-                label: Text(filter.label),
+              _DeviceFilterButton(
+                label: filter.label,
                 selected: selected == filter.id,
-                onSelected: (_) => onSelected(filter.id),
-                visualDensity: VisualDensity.compact,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                onTap: () => onSelected(filter.id),
               ),
               const SizedBox(width: 8),
             ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DeviceFilterButton extends StatelessWidget {
+  const _DeviceFilterButton({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOutCubic,
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(999),
+          color: selected ? const Color(0x22F4EFE3) : Colors.transparent,
+          border: Border.all(
+            color: selected ? const Color(0x70F4EFE3) : VinkColors.lineSoft,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? VinkColors.text : VinkColors.muted,
+            fontSize: 12,
+            fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
+          ),
         ),
       ),
     );

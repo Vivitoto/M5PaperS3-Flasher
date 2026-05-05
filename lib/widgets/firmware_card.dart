@@ -211,7 +211,7 @@ class _FirmwareVersionPanel extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-            color: downloaded ? const Color(0x6686EFAC) : VinkColors.lineSoft),
+            color: downloaded ? const Color(0x70F4EFE3) : VinkColors.lineSoft),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -344,7 +344,7 @@ class _Downloading extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
       decoration: BoxDecoration(
-        color: VinkColors.cyan.withOpacity(0.08),
+        color: const Color(0x14F4EFE3),
         borderRadius: BorderRadius.circular(13),
         border: Border.all(color: VinkColors.lineSoft),
       ),

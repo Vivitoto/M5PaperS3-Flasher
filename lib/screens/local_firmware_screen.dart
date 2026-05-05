@@ -491,17 +491,25 @@ class _Downloading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(child: LinearProgressIndicator(value: progress)),
-        const SizedBox(width: 8),
-        Text(
-          progress == null
-              ? '下载中'
-              : '${(progress! * 100).clamp(0, 100).toStringAsFixed(0)}%',
-          style: const TextStyle(color: VinkColors.muted, fontSize: 12),
-        ),
-      ],
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0x14F4EFE3),
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(color: VinkColors.lineSoft),
+      ),
+      child: Row(
+        children: [
+          Expanded(child: LinearProgressIndicator(value: progress)),
+          const SizedBox(width: 8),
+          Text(
+            progress == null
+                ? '下载中'
+                : '${(progress! * 100).clamp(0, 100).toStringAsFixed(0)}%',
+            style: const TextStyle(color: VinkColors.muted, fontSize: 12),
+          ),
+        ],
+      ),
     );
   }
 }

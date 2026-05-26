@@ -83,11 +83,16 @@ class EspNativeFlasher(
         flashOffset: Int = profile.defaultFlashOffset.bytes,
         baudRate: Int = profile.defaultBaudRate,
         reboot: Boolean = true,
+        // Reserved for parity with the PaperS3 native flasher. The generic
+        // ESP native path already writes the complete image start-to-end
+        // (no skip-blank fast mode), so `cleanWrite` is currently a no-op and
+        // only affects logging. Wired in so the UI "彻底烧录" toggle has a
+        // consistent contract across all three flashing paths.
+        @Suppress("UNUSED_PARAMETER") cleanWrite: Boolean = false,
     ) {
         val firmware = File(firmwarePath)
         require(firmware.exists()) { "固件文件不存在: $firmwarePath" }
         val bytes = firmware.readBytes()
-        val started = System.currentTimeMillis()
 
         chipFamily = profile.chipFamily
 
@@ -107,6 +112,10 @@ class EspNativeFlasher(
 
             progress(0, bytes.size, 0.0, "开始写入固件")
             flashBegin(bytes.size, flashOffset)
+            // Reset the speed window once the real flash phase begins; bootloader
+            // handshake / sync / SPI attach / erase setup above is fixed overhead.
+            val flashPhaseStart = System.currentTimeMillis()
+            val speedWindow = SpeedWindow()
 
             val block = ByteArray(BLOCK_SIZE)
             val blocks = (bytes.size + BLOCK_SIZE - 1) / BLOCK_SIZE
@@ -120,9 +129,14 @@ class EspNativeFlasher(
                 written += chunkLength
 
                 if (sequence % PROGRESS_BLOCK_INTERVAL == 0 || sequence == blocks - 1) {
-                    val elapsed = max(1L, System.currentTimeMillis() - started) / 1000.0
                     val label = if (flashOffset == 0) "正在刷写完整镜像" else "正在刷写固件"
-                    progress(written, bytes.size, written / elapsed, label)
+                    val now = System.currentTimeMillis()
+                    val sample = speedWindow.sample(written, now)
+                    val speed = sample ?: run {
+                        val elapsedFlashSec = max(1L, now - flashPhaseStart) / 1000.0
+                        written / elapsedFlashSec
+                    }
+                    progress(written, bytes.size, speed, label)
                 }
             }
 

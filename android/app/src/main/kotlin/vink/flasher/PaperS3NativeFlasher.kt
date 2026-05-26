@@ -27,9 +27,14 @@ class PaperS3NativeFlasher(
         const val SPI_ATTACH = 0x0D
 
         const val BLOCK_SIZE = 0x400
+        const val SECTOR_SIZE = 0x1000
         const val READ_TIMEOUT_MS = 5000
         const val WRITE_TIMEOUT_MS = 5000
         const val PROGRESS_BLOCK_INTERVAL = 50 // match 0xFlash log cadence, about 50KB
+    }
+
+    private data class FlashRange(val start: Int, val endExclusive: Int) {
+        val size: Int get() = endExclusive - start
     }
 
     private var port: UsbSerialPort? = null
@@ -41,11 +46,11 @@ class PaperS3NativeFlasher(
         flashOffset: Int,
         baudRate: Int,
         reboot: Boolean,
+        cleanWrite: Boolean = false,
     ) {
         val firmware = File(firmwarePath)
         require(firmware.exists()) { "固件文件不存在: $firmwarePath" }
         val bytes = firmware.readBytes()
-        val started = System.currentTimeMillis()
 
         openPort(deviceName, baudRate)
         try {
@@ -58,27 +63,22 @@ class PaperS3NativeFlasher(
             spiSetParams()
 
             progress(0, bytes.size, 0.0, "开始写入固件")
-            flashBegin(bytes.size, flashOffset)
-
-            val block = ByteArray(BLOCK_SIZE)
-            val blocks = (bytes.size + BLOCK_SIZE - 1) / BLOCK_SIZE
-            var written = 0
-            for (sequence in 0 until blocks) {
-                if (shouldCancel()) throw InterruptedException("Flash cancelled by user")
-                val chunkLength = min(BLOCK_SIZE, bytes.size - written)
-                block.fill(0.toByte())
-                System.arraycopy(bytes, written, block, 0, chunkLength)
-                flashData(block, sequence)
-                written += chunkLength
-
-                if (sequence % PROGRESS_BLOCK_INTERVAL == 0 || sequence == blocks - 1) {
-                    val elapsed = max(1L, System.currentTimeMillis() - started) / 1000.0
-                    progress(
-                        written,
-                        bytes.size,
-                        written / elapsed,
-                        if (flashOffset == 0) "正在刷写完整镜像" else "正在刷写固件",
-                    )
+            // Reset the speed window once the real flash phase begins; everything
+            // above (bootloader handshake, sync, SPI attach, SPI params, erase
+            // setup) is fixed overhead and should not deflate the displayed rate.
+            val flashPhaseStart = System.currentTimeMillis()
+            val speedWindow = SpeedWindow()
+            if (cleanWrite) {
+                emitLog("Clean write: writing the whole ${bytes.size} byte image")
+                writeRange(bytes, 0, bytes.size, flashOffset, flashPhaseStart, speedWindow, bytes.size, "正在彻底刷写完整镜像")
+            } else {
+                val ranges = findNonBlankSectorRanges(bytes)
+                val bytesToWrite = ranges.sumOf { it.size }
+                emitLog("Fast write: ${ranges.size} non-blank ranges, $bytesToWrite/${bytes.size} bytes to transfer")
+                for (range in ranges) {
+                    if (shouldCancel()) throw InterruptedException("Flash cancelled by user")
+                    emitLog("Fast write range: 0x${(flashOffset + range.start).toString(16)} + ${range.size} bytes")
+                    writeRange(bytes, range.start, range.endExclusive, flashOffset + range.start, flashPhaseStart, speedWindow, bytes.size, "正在快速刷写完整镜像")
                 }
             }
 
@@ -188,6 +188,69 @@ class PaperS3NativeFlasher(
         out.u32(0xFFFF)
         sendCommand(SPI_SET_PARAMS, out.toByteArray())
         readCommandResponse(SPI_SET_PARAMS, READ_TIMEOUT_MS, checkStatus = false)
+    }
+
+    private fun findNonBlankSectorRanges(bytes: ByteArray): List<FlashRange> {
+        val ranges = ArrayList<FlashRange>()
+        var rangeStart = -1
+        var sectorStart = 0
+        while (sectorStart < bytes.size) {
+            val sectorEnd = min(bytes.size, sectorStart + SECTOR_SIZE)
+            var blank = true
+            for (i in sectorStart until sectorEnd) {
+                if ((bytes[i].toInt() and 0xFF) != 0xFF) {
+                    blank = false
+                    break
+                }
+            }
+            if (!blank && rangeStart < 0) {
+                rangeStart = sectorStart
+            } else if (blank && rangeStart >= 0) {
+                ranges.add(FlashRange(rangeStart, sectorStart))
+                rangeStart = -1
+            }
+            sectorStart += SECTOR_SIZE
+        }
+        if (rangeStart >= 0) ranges.add(FlashRange(rangeStart, bytes.size))
+        return ranges
+    }
+
+    private fun writeRange(
+        bytes: ByteArray,
+        start: Int,
+        endExclusive: Int,
+        flashOffset: Int,
+        flashPhaseStart: Long,
+        speedWindow: SpeedWindow,
+        progressTotal: Int,
+        stage: String,
+    ) {
+        val size = endExclusive - start
+        if (size <= 0) return
+        flashBegin(size, flashOffset)
+
+        val block = ByteArray(BLOCK_SIZE)
+        val blocks = (size + BLOCK_SIZE - 1) / BLOCK_SIZE
+        var writtenInRange = 0
+        for (sequence in 0 until blocks) {
+            if (shouldCancel()) throw InterruptedException("Flash cancelled by user")
+            val chunkLength = min(BLOCK_SIZE, size - writtenInRange)
+            block.fill(0.toByte())
+            System.arraycopy(bytes, start + writtenInRange, block, 0, chunkLength)
+            flashData(block, sequence)
+            writtenInRange += chunkLength
+
+            if (sequence % PROGRESS_BLOCK_INTERVAL == 0 || sequence == blocks - 1) {
+                val now = System.currentTimeMillis()
+                val logicalWritten = min(progressTotal, start + writtenInRange)
+                val sample = speedWindow.sample(logicalWritten, now)
+                val speed = sample ?: run {
+                    val elapsedFlashSec = max(1L, now - flashPhaseStart) / 1000.0
+                    logicalWritten / elapsedFlashSec
+                }
+                progress(logicalWritten, progressTotal, speed, stage)
+            }
+        }
     }
 
     private fun flashBegin(size: Int, offset: Int) {

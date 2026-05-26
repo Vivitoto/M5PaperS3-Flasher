@@ -139,7 +139,6 @@ class EspFlasher {
     bool reboot = true,
   }) async* {
     final bytes = await firmware.readAsBytes();
-    final started = Stopwatch()..start();
 
     yield FlashProgress(
       writtenBytes: 0,
@@ -179,6 +178,12 @@ class EspFlasher {
       stage: '开始写入固件',
     );
     await flashBegin(bytes.length, flashOffset);
+    // Reset the speed window once the real flash phase begins; bootloader
+    // handshake / sync / erase setup above is fixed overhead and should not
+    // deflate the displayed rate.
+    final flashPhaseStart = Stopwatch()..start();
+    final speedWindow = <_SpeedSample>[];
+    const speedWindowMs = 1500;
 
     var sequence = 0;
     var written = 0;
@@ -198,11 +203,27 @@ class EspFlasher {
           written - lastProgressBytes >= progressUpdateBytes;
       if (shouldReport) {
         lastProgressBytes = written;
-        final elapsed = started.elapsedMilliseconds / 1000.0;
+        final nowMs = flashPhaseStart.elapsedMilliseconds;
+        final cutoff = nowMs - speedWindowMs;
+        while (speedWindow.isNotEmpty && speedWindow.first.timeMs < cutoff) {
+          speedWindow.removeAt(0);
+        }
+        speedWindow.add(_SpeedSample(written, nowMs));
+        double speed;
+        if (speedWindow.length >= 2) {
+          final oldest = speedWindow.first;
+          final newest = speedWindow.last;
+          final deltaBytes = newest.bytes - oldest.bytes;
+          final deltaMs = (newest.timeMs - oldest.timeMs).clamp(1, 1 << 30);
+          speed = deltaBytes <= 0 ? 0.0 : deltaBytes * 1000.0 / deltaMs;
+        } else {
+          final elapsedSec = (nowMs <= 0 ? 1 : nowMs) / 1000.0;
+          speed = written / elapsedSec;
+        }
         yield FlashProgress(
           writtenBytes: written,
           totalBytes: bytes.length,
-          speedBytesPerSecond: elapsed <= 0 ? 0 : written / elapsed,
+          speedBytesPerSecond: speed,
           stage: flashOffset == 0 ? '正在刷写完整镜像' : '正在刷写固件',
         );
       }
@@ -478,4 +499,10 @@ class EspFlasher {
     if (port == null) throw StateError('Serial port is not connected.');
     return port;
   }
+}
+
+class _SpeedSample {
+  const _SpeedSample(this.bytes, this.timeMs);
+  final int bytes;
+  final int timeMs;
 }

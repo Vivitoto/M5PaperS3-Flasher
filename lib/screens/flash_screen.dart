@@ -31,6 +31,14 @@ class _FlashScreenState extends State<FlashScreen> {
   int _baudRate = 921600;
   String _burnMode = 'fast';
   String _flashProfile = 'papers3';
+  // Esptool path speed tracking: percent → bytes via firmware size, fed into a
+  // 1.5s sliding window so the displayed speed is the recent instantaneous
+  // rate (consistent with PaperS3 / native paths).
+  int _esptoolFirmwareBytes = 0;
+  final List<_EsptoolSpeedSample> _esptoolSpeedSamples = [];
+  DateTime? _esptoolFlashPhaseStart;
+  int _esptoolLastBytes = 0;
+  static const int _esptoolSpeedWindowMs = 1500;
   static const String _logPrefsKey = 'flash_screen_logs';
 
   @override
@@ -223,12 +231,53 @@ class _FlashScreenState extends State<FlashScreen> {
     final percentMatch = RegExp(r'\((\d+)\s*%\)').firstMatch(line);
     if (percentMatch != null) {
       final percent = int.tryParse(percentMatch.group(1) ?? '0') ?? 0;
+      // Lazy-init the flash phase once the first 'Writing at ...(N %)' line
+      // arrives. Everything above (connect / stub / erase) is fixed overhead
+      // and should not deflate the displayed rate.
+      _esptoolFlashPhaseStart ??= DateTime.now();
+      final now = DateTime.now();
+      final elapsedMs =
+          now.difference(_esptoolFlashPhaseStart!).inMilliseconds;
+      // Convert percent → bytes when we know the firmware size. If not,
+      // fall back to percent-as-bytes so the window still produces a
+      // monotonic series and we don't divide by an unknown.
+      final int writtenBytes = _esptoolFirmwareBytes > 0
+          ? ((percent.clamp(0, 100)) * _esptoolFirmwareBytes ~/ 100)
+          : percent;
+      // Skip stale duplicate updates that don't advance progress.
+      if (writtenBytes < _esptoolLastBytes) {
+        return;
+      }
+      _esptoolLastBytes = writtenBytes;
+
+      final cutoff = elapsedMs - _esptoolSpeedWindowMs;
+      while (_esptoolSpeedSamples.isNotEmpty &&
+          _esptoolSpeedSamples.first.elapsedMs < cutoff) {
+        _esptoolSpeedSamples.removeAt(0);
+      }
+      _esptoolSpeedSamples.add(_EsptoolSpeedSample(writtenBytes, elapsedMs));
+
+      double speed = 0;
+      if (_esptoolSpeedSamples.length >= 2 && _esptoolFirmwareBytes > 0) {
+        final oldest = _esptoolSpeedSamples.first;
+        final newest = _esptoolSpeedSamples.last;
+        final deltaBytes = newest.bytes - oldest.bytes;
+        final deltaMs = (newest.elapsedMs - oldest.elapsedMs)
+            .clamp(1, 1 << 30);
+        speed = deltaBytes <= 0 ? 0.0 : deltaBytes * 1000.0 / deltaMs;
+      } else if (_esptoolFirmwareBytes > 0 && elapsedMs > 0) {
+        speed = writtenBytes * 1000.0 / elapsedMs;
+      }
+
       setState(() {
         _status = '正在写入固件 $percent%';
         _progress = FlashProgress(
+          // Keep the existing percent-as-progress contract so the progress
+          // bar (which divides written/total) stays correct regardless of
+          // whether we know the firmware byte size.
           writtenBytes: percent,
           totalBytes: 100,
-          speedBytesPerSecond: 0,
+          speedBytesPerSecond: speed,
           stage: '官方 esptool 正在写入固件',
         );
       });
@@ -259,11 +308,18 @@ class _FlashScreenState extends State<FlashScreen> {
         _progress = FlashProgress(
           writtenBytes: _progress?.writtenBytes ?? 0,
           totalBytes: 100,
-          speedBytesPerSecond: 0,
+          speedBytesPerSecond: _progress?.speedBytesPerSecond ?? 0,
           stage: stage!,
         );
       });
     }
+  }
+
+  void _resetEsptoolSpeedTracker(int firmwareBytes) {
+    _esptoolFirmwareBytes = firmwareBytes;
+    _esptoolSpeedSamples.clear();
+    _esptoolFlashPhaseStart = null;
+    _esptoolLastBytes = 0;
   }
 
   Future<void> _scanDevices() async {
@@ -452,6 +508,7 @@ class _FlashScreenState extends State<FlashScreen> {
             firmware: File(path),
             flashOffset: widget.firmware.flashOffset,
             baudRate: _baudRate,
+            cleanWrite: _burnMode == 'clean',
           );
           if (!mounted) return;
 
@@ -513,6 +570,12 @@ class _FlashScreenState extends State<FlashScreen> {
                 });
               })
             : null;
+        // Prepare the esptool speed tracker for the python esptool path so the
+        // displayed kbit/s matches the PaperS3 / native paths (1.5s window).
+        if (!_usesNativeGenericEsp) {
+          final firmwareBytes = await File(path).length();
+          _resetEsptoolSpeedTracker(firmwareBytes);
+        }
         try {
           final result = _usesNativeGenericEsp
               ? await EsptoolService.instance.flashEspNative(
@@ -521,6 +584,7 @@ class _FlashScreenState extends State<FlashScreen> {
                   firmware: File(path),
                   flashOffset: widget.firmware.flashOffset,
                   baudRate: _baudRate,
+                  cleanWrite: _burnMode == 'clean',
                 )
               : await EsptoolService.instance.flashFullImage(
                   port: device.id,
@@ -528,6 +592,7 @@ class _FlashScreenState extends State<FlashScreen> {
                   flashOffset: widget.firmware.flashOffset,
                   baudRate: _baudRate,
                   flashProfile: _flashProfile,
+                  cleanWrite: _burnMode == 'clean',
                 );
           if (!mounted) return;
 
@@ -834,4 +899,10 @@ class _FlashScreenState extends State<FlashScreen> {
       ),
     );
   }
+}
+
+class _EsptoolSpeedSample {
+  const _EsptoolSpeedSample(this.bytes, this.elapsedMs);
+  final int bytes;
+  final int elapsedMs;
 }

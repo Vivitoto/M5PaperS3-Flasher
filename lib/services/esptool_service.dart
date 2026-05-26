@@ -75,6 +75,7 @@ class EsptoolService {
     int baudRate = 115200,
     String flashSize = '16MB',
     String flashProfile = 'papers3',
+    bool cleanWrite = false,
   }) async {
     final offset =
         flashOffset == 0 ? '0x0' : '0x${flashOffset.toRadixString(16)}';
@@ -95,6 +96,7 @@ class EsptoolService {
           'hard_reset',
           '--no-stub',
           'write_flash',
+          if (cleanWrite) '--erase-all',
           '-z',
           offset,
           firmware.path,
@@ -113,6 +115,7 @@ class EsptoolService {
           '--after',
           'hard_reset',
           'write_flash',
+          if (cleanWrite) '--erase-all',
           '--flash_size',
           flashSize,
           '--flash_mode',
@@ -141,6 +144,7 @@ class EsptoolService {
     required int flashOffset,
     int? baudRate,
     bool reboot = true,
+    bool cleanWrite = false,
   }) async {
     final raw = await _channel.invokeMethod<Map<dynamic, dynamic>>(
       'flashEspNative',
@@ -151,6 +155,7 @@ class EsptoolService {
         'flashOffset': flashOffset,
         if (baudRate != null) 'baudRate': baudRate,
         'reboot': reboot,
+        'cleanWrite': cleanWrite,
       },
     );
     final result = raw ?? const <dynamic, dynamic>{};
@@ -193,6 +198,7 @@ class EsptoolService {
     required int flashOffset,
     int baudRate = 921600,
     bool reboot = true,
+    bool cleanWrite = false,
   }) async {
     final raw = await _channel.invokeMethod<Map<dynamic, dynamic>>(
       'flashPaperS3Native',
@@ -202,6 +208,7 @@ class EsptoolService {
         'flashOffset': flashOffset,
         'baudRate': baudRate,
         'reboot': reboot,
+        'cleanWrite': cleanWrite,
       },
     );
     final result = raw ?? const <dynamic, dynamic>{};

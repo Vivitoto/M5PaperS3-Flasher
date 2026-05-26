@@ -251,6 +251,7 @@ class MainActivity : FlutterActivity() {
             ?: EspDeviceProfile.GENERIC_ESP32S3
         val baudRate = call.argument<Int>("baudRate") ?: profile.defaultBaudRate
         val reboot = call.argument<Boolean>("reboot") ?: true
+        val cleanWrite = call.argument<Boolean>("cleanWrite") ?: false
         if (firmwarePath.isNullOrBlank()) {
             result.error("bad_args", "Missing firmwarePath", null)
             return
@@ -259,7 +260,7 @@ class MainActivity : FlutterActivity() {
         cancelRequested = false
         Thread {
             try {
-                emitLog("native ESP flash: profile=${profile.name} device=$deviceName baud=$baudRate offset=0x${flashOffset.toString(16)}")
+                emitLog("native ESP flash: profile=${profile.name} device=$deviceName baud=$baudRate offset=0x${flashOffset.toString(16)} cleanWrite=$cleanWrite")
                 EspNativeFlasher(
                     context = this,
                     shouldCancel = { cancelRequested },
@@ -272,6 +273,7 @@ class MainActivity : FlutterActivity() {
                     flashOffset = flashOffset,
                     baudRate = baudRate,
                     reboot = reboot,
+                    cleanWrite = cleanWrite,
                 )
                 mainHandler.post {
                     result.success(
@@ -336,6 +338,7 @@ class MainActivity : FlutterActivity() {
         val flashOffset = call.argument<Int>("flashOffset") ?: 0
         val baudRate = call.argument<Int>("baudRate") ?: 921600
         val reboot = call.argument<Boolean>("reboot") ?: true
+        val cleanWrite = call.argument<Boolean>("cleanWrite") ?: false
         if (firmwarePath.isNullOrBlank()) {
             result.error("bad_args", "Missing firmwarePath", null)
             return
@@ -344,7 +347,7 @@ class MainActivity : FlutterActivity() {
         cancelRequested = false
         Thread {
             try {
-                emitLog("native PaperS3 flash: device=$deviceName baud=$baudRate offset=0x${flashOffset.toString(16)}")
+                emitLog("native PaperS3 flash: device=$deviceName baud=$baudRate offset=0x${flashOffset.toString(16)} cleanWrite=$cleanWrite")
                 PaperS3NativeFlasher(
                     context = this,
                     shouldCancel = { cancelRequested },
@@ -356,6 +359,7 @@ class MainActivity : FlutterActivity() {
                     flashOffset = flashOffset,
                     baudRate = baudRate,
                     reboot = reboot,
+                    cleanWrite = cleanWrite,
                 )
                 mainHandler.post {
                     result.success(

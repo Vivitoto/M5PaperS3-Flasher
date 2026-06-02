@@ -11,7 +11,9 @@ class FirmwareCard extends StatelessWidget {
     required this.onDownload,
     required this.onDelete,
     required this.onFlash,
+    required this.onExport,
     required this.isDownloading,
+    required this.isExporting,
     required this.downloadProgress,
     required this.localStatus,
     required this.partialBytes,
@@ -23,7 +25,9 @@ class FirmwareCard extends StatelessWidget {
   final void Function(Firmware firmware, {bool force}) onDownload;
   final void Function(Firmware firmware) onDelete;
   final void Function(Firmware firmware) onFlash;
+  final void Function(Firmware firmware) onExport;
   final bool Function(Firmware firmware) isDownloading;
+  final bool Function(Firmware firmware) isExporting;
   final double? Function(Firmware firmware) downloadProgress;
   final LocalFirmwareStatus Function(Firmware firmware) localStatus;
   final int? Function(Firmware firmware) partialBytes;
@@ -118,12 +122,14 @@ class FirmwareCard extends StatelessWidget {
               title: '最新版本',
               expanded: false,
               isDownloading: isDownloading(latest),
+              isExporting: isExporting(latest),
               progress: downloadProgress(latest),
               status: localStatus(latest),
               partialBytes: partialBytes(latest),
               onDownload: onDownload,
               onDelete: showDeleteAction ? onDelete : null,
               onFlash: showFlashAction ? onFlash : null,
+              onExport: onExport,
             ),
             if (history.isNotEmpty) ...[
               const SizedBox(height: 4),
@@ -146,12 +152,14 @@ class FirmwareCard extends StatelessWidget {
                         expanded: false,
                         dense: true,
                         isDownloading: isDownloading(item),
+                        isExporting: isExporting(item),
                         progress: downloadProgress(item),
                         status: localStatus(item),
                         partialBytes: partialBytes(item),
                         onDownload: onDownload,
                         onDelete: showDeleteAction ? onDelete : null,
                         onFlash: showFlashAction ? onFlash : null,
+                        onExport: onExport,
                       ),
                       const SizedBox(height: 8),
                     ],
@@ -172,12 +180,14 @@ class _FirmwareVersionPanel extends StatelessWidget {
     required this.title,
     required this.expanded,
     required this.isDownloading,
+    required this.isExporting,
     required this.progress,
     required this.status,
     required this.partialBytes,
     required this.onDownload,
     required this.onDelete,
     required this.onFlash,
+    required this.onExport,
     this.dense = false,
   });
 
@@ -186,12 +196,14 @@ class _FirmwareVersionPanel extends StatelessWidget {
   final bool expanded;
   final bool dense;
   final bool isDownloading;
+  final bool isExporting;
   final double? progress;
   final LocalFirmwareStatus status;
   final int? partialBytes;
   final void Function(Firmware firmware, {bool force}) onDownload;
   final void Function(Firmware firmware)? onDelete;
   final void Function(Firmware firmware)? onFlash;
+  final void Function(Firmware firmware) onExport;
 
   @override
   Widget build(BuildContext context) {
@@ -255,7 +267,9 @@ class _FirmwareVersionPanel extends StatelessWidget {
             _VersionActions(
               downloaded: downloaded,
               partial: partial,
+              exporting: isExporting,
               onDownload: () => onDownload(firmware, force: downloaded),
+              onExport: downloaded ? () => onExport(firmware) : null,
               onDelete:
                   downloaded || partial ? () => onDelete?.call(firmware) : null,
               onFlash: onFlash == null ? null : () => onFlash!.call(firmware),
@@ -274,14 +288,18 @@ class _VersionActions extends StatelessWidget {
   const _VersionActions({
     required this.downloaded,
     required this.partial,
+    required this.exporting,
     required this.onDownload,
     required this.onFlash,
+    this.onExport,
     this.onDelete,
   });
 
   final bool downloaded;
   final bool partial;
+  final bool exporting;
   final VoidCallback onDownload;
+  final VoidCallback? onExport;
   final VoidCallback? onDelete;
   final VoidCallback? onFlash;
 
@@ -318,6 +336,24 @@ class _VersionActions extends StatelessWidget {
               icon: const Icon(Icons.bolt_rounded),
               label: Text(downloaded ? '刷写' : '下载刷写'),
             ),
+          ),
+        ],
+        if (onExport != null) ...[
+          const SizedBox(width: 6),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+            ),
+            onPressed: exporting ? null : onExport,
+            icon: exporting
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.drive_file_move_outline_rounded),
+            label: const Text('导出'),
           ),
         ],
         if (onDelete != null) ...[

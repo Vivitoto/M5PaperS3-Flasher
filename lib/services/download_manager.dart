@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
@@ -42,8 +43,19 @@ class DownloadProgress {
       : receivedBytes / totalBytes!;
 }
 
+class ExportedFirmware {
+  const ExportedFirmware({required this.name, required this.uri, this.path});
+
+  final String name;
+  final String uri;
+  final String? path;
+}
+
 class DownloadManager {
   DownloadManager({http.Client? client}) : _client = client ?? http.Client();
+
+  static const MethodChannel _filesChannel =
+      MethodChannel('vink.flasher/firmware_files');
 
   final http.Client _client;
 
@@ -225,6 +237,37 @@ class DownloadManager {
     if (await tempFile.exists()) await tempFile.delete();
   }
 
+  Future<ExportedFirmware> exportToDownloads(Firmware firmware) async {
+    final file = await _localFirmwareFile(firmware);
+    if (!await file.exists()) {
+      throw Exception('本地固件不存在，请先下载完成');
+    }
+    final name = _fileName(file.path);
+
+    if (Platform.isAndroid) {
+      final raw = await _filesChannel.invokeMethod<Map<dynamic, dynamic>>(
+        'exportFirmwareToDownloads',
+        {'path': file.path, 'name': name},
+      );
+      final result = raw ?? const <dynamic, dynamic>{};
+      return ExportedFirmware(
+        name: result['name']?.toString() ?? name,
+        uri: result['uri']?.toString() ?? '',
+        path: result['path']?.toString(),
+      );
+    }
+
+    final directory = await getDownloadsDirectory() ??
+        await getApplicationDocumentsDirectory();
+    if (!await directory.exists()) await directory.create(recursive: true);
+    final output = File('${directory.path}/$name');
+    if (output.path != file.path) {
+      if (await output.exists()) await output.delete();
+      await file.copy(output.path);
+    }
+    return ExportedFirmware(name: name, uri: output.uri.toString(), path: output.path);
+  }
+
   Future<List<Firmware>> scanLocalFirmwares() async {
     final directory = await _firmwareDirectory();
     if (!await directory.exists()) return const <Firmware>[];
@@ -269,6 +312,20 @@ class DownloadManager {
   Future<Directory> _firmwareDirectory() async {
     final base = await getApplicationDocumentsDirectory();
     return Directory('${base.path}/firmwares');
+  }
+
+  Future<File> _localFirmwareFile(Firmware firmware) async {
+    final localPath = firmware.localPath;
+    if (localPath != null && localPath.isNotEmpty) return File(localPath);
+    return _targetFile(firmware);
+  }
+
+  String _fileName(String path) {
+    final uri = Uri.tryParse(path);
+    if (uri != null && uri.pathSegments.isNotEmpty) {
+      return uri.pathSegments.last;
+    }
+    return path.split(Platform.pathSeparator).last;
   }
 
   List<String> _downloadUrls(Firmware firmware) {

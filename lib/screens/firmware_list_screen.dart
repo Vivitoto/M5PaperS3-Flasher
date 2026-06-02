@@ -21,6 +21,7 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
   final _downloadManager = DownloadManager();
   late Future<List<Firmware>> _future;
   final Map<String, double?> _downloadProgress = {};
+  final Map<String, bool> _exporting = {};
   final Map<String, String> _localPaths = {};
   final Map<String, LocalFirmwareStatus> _localStatus = {};
   final Map<String, int> _partialBytes = {};
@@ -165,6 +166,29 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('下载失败: $error')),
       );
+    }
+  }
+
+  Future<void> _exportLocal(Firmware firmware) async {
+    if (_exporting[firmware.id] == true) return;
+    setState(() => _exporting[firmware.id] = true);
+    try {
+      final exported = await _downloadManager.exportToDownloads(
+        firmware.copyWith(localPath: _localPaths[firmware.id]),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已导出到系统下载目录：${exported.name}')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('导出失败: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _exporting.remove(firmware.id));
+      }
     }
   }
 
@@ -329,6 +353,8 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
                       firmwares: group,
                       isDownloading: (firmware) =>
                           _downloadProgress.containsKey(firmware.id),
+                      isExporting: (firmware) =>
+                          _exporting[firmware.id] == true,
                       downloadProgress: (firmware) =>
                           _downloadProgress[firmware.id],
                       localStatus: (firmware) =>
@@ -338,6 +364,7 @@ class _FirmwareListScreenState extends State<FirmwareListScreen> {
                       showFlashAction: false,
                       onDownload: _download,
                       onDelete: _deleteLocal,
+                      onExport: _exportLocal,
                       onFlash: (firmware) async {
                         if (_localPaths[firmware.id] == null &&
                             firmware.localPath == null) {

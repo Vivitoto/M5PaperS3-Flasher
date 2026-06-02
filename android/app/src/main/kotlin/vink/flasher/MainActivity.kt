@@ -25,8 +25,10 @@ import java.net.URL
 class MainActivity : FlutterActivity() {
     private val channelName = "vink.flasher/esptool"
     private val updateChannelName = "vink.flasher/app_update"
+    private val firmwareFilesChannelName = "vink.flasher/firmware_files"
     private lateinit var channel: MethodChannel
     private lateinit var updateChannel: MethodChannel
+    private lateinit var firmwareFilesChannel: MethodChannel
     @Volatile private var cancelRequested = false
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -58,6 +60,99 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+
+        firmwareFilesChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, firmwareFilesChannelName)
+        firmwareFilesChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "exportFirmwareToDownloads" -> exportFirmwareToDownloads(call, result)
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    private fun exportFirmwareToDownloads(call: MethodCall, result: MethodChannel.Result) {
+        val path = call.argument<String>("path")
+        val rawName = call.argument<String>("name") ?: "firmware.bin"
+        if (path.isNullOrBlank()) {
+            result.error("bad_args", "Missing firmware path", null)
+            return
+        }
+        val source = File(path)
+        if (!source.exists() || !source.isFile) {
+            result.error("missing_file", "Firmware file does not exist", null)
+            return
+        }
+        val name = rawName.replace(Regex("[^A-Za-z0-9._-]"), "_")
+            .let { if (it.lowercase().endsWith(".bin")) it else "$it.bin" }
+
+        Thread {
+            try {
+                val exported = writeFirmwareToPublicDownloads(source, name)
+                mainHandler.post { result.success(exported) }
+            } catch (error: Throwable) {
+                val details = buildNativeErrorDetails(error)
+                mainHandler.post { result.error("export_failed", details, null) }
+            }
+        }.start()
+    }
+
+    private fun writeFirmwareToPublicDownloads(source: File, name: String): Map<String, Any?> {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            writeFirmwareToMediaStore(source, name)
+        } else {
+            writeFirmwareToLegacyDownloads(source, name)
+        }
+    }
+
+    private fun writeFirmwareToMediaStore(source: File, name: String): Map<String, Any?> {
+        val resolver = contentResolver
+        val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+        val relativePath = "${Environment.DIRECTORY_DOWNLOADS}/Vink Flasher"
+        resolver.query(
+            collection,
+            arrayOf(MediaStore.Downloads._ID),
+            "${MediaStore.Downloads.DISPLAY_NAME}=? AND ${MediaStore.Downloads.RELATIVE_PATH}=?",
+            arrayOf(name, relativePath),
+            null,
+        )?.use { cursor ->
+            while (cursor.moveToNext()) {
+                val id = cursor.getLong(0)
+                resolver.delete(Uri.withAppendedPath(collection, id.toString()), null, null)
+            }
+        }
+
+        val values = ContentValues().apply {
+            put(MediaStore.Downloads.DISPLAY_NAME, name)
+            put(MediaStore.Downloads.MIME_TYPE, "application/octet-stream")
+            put(MediaStore.Downloads.RELATIVE_PATH, relativePath)
+            put(MediaStore.Downloads.IS_PENDING, 1)
+        }
+        val uri = resolver.insert(collection, values)
+            ?: throw IllegalStateException("Unable to create firmware in system Downloads")
+        try {
+            resolver.openOutputStream(uri, "w")?.use { output ->
+                source.inputStream().use { input -> input.copyTo(output, 128 * 1024) }
+                output.flush()
+            } ?: throw IllegalStateException("Unable to open Downloads output stream")
+            val done = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
+            resolver.update(uri, done, null, null)
+            return mapOf("uri" to uri.toString(), "path" to null, "name" to name)
+        } catch (error: Throwable) {
+            resolver.delete(uri, null, null)
+            throw error
+        }
+    }
+
+    private fun writeFirmwareToLegacyDownloads(source: File, name: String): Map<String, Any?> {
+        val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Vink Flasher")
+        if (!dir.exists()) dir.mkdirs()
+        val file = File(dir, name)
+        if (file.exists()) file.delete()
+        source.inputStream().use { input ->
+            FileOutputStream(file).use { output -> input.copyTo(output, 128 * 1024) }
+        }
+        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+        return mapOf("uri" to uri.toString(), "path" to file.absolutePath, "name" to name)
     }
 
 

@@ -352,7 +352,7 @@ class _VersionActions extends StatelessWidget {
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Icon(Icons.drive_file_move_outline_rounded),
+                : const Icon(Icons.save_alt_rounded),
             label: const Text('导出'),
           ),
         ],
